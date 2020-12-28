@@ -1,0 +1,306 @@
+# *********************************************************************** #
+#              ** Statistical Methods for Data Science I **               #
+#             ** Topic 13 - Parametric Inference - Basics **              #
+# *********************************************************************** #
+
+#' ---
+#' title:  "Statistical Methods for Data Science I"
+#' author: "Pierpaolo Brutti"
+#' date:   "Topic 13 - Parametric Inference - Basics"
+#' ---
+
+# Bernoulli Likelihood ----------------------------------------------------
+
+# Get the weed data
+load("meweed.RData")
+levels(meweed)
+n     <- length(meweed)
+tt    <- prop.table(table(meweed))
+tt
+p.hat <- tt["yes"]
+p.hat # MLE
+
+# Bernoulli likelihood
+L <- function(p, x){
+  n     <- length(x)
+  x.bar <- mean(x, na.rm = T)
+  n*x.bar*log(p) + (n - n*x.bar)*log(1-p)
+}
+
+# Transform factor > numeric: "yes" = 1
+dd <- as.numeric(as.character(
+  factor(meweed, labels = c("0","1"))
+  ))
+
+# Plot
+par(mfrow = c(2,1))
+barplot(tt, col = "orchid", border = "white",
+        main = "Weed data")
+
+curve(L(x,dd), lwd = 6, col = "orchid",
+      xlab = "p", ylab = "L(p|x)", 
+      main = "Bernoulli likelihood: Weed data")
+segments(-5, L(p.hat,dd), p.hat, L(p.hat,dd), 
+         lty = 3, lwd = 3, col = "green3")
+segments(p.hat, -150, p.hat, L(p.hat,dd), 
+         lty = 3, lwd = 3, col = "green3")
+text(p.hat, -120, bquote(hat(p) == .(round(p.hat,2))), 
+     pos = 4, cex = .8, col = "green3")
+grid()
+par(mfrow = c(1,1))
+
+# MLE: Sampling Variability -----------------------------------------------
+
+# Package
+library(viridis)
+
+# Bernoulli likelihood
+L <- function(p, x){
+  n     <- length(x)
+  x.bar <- mean(x, na.rm = T)
+  exp(n*x.bar*log(p) + (n - n*x.bar)*log(1-p))
+}
+
+# Sim-Setup
+n    <- 30   # sample size
+M    <- 5    # simulation size
+colo <- viridis(3*M, alpha = .2)
+
+# Init seed & MLE vector
+set.seed(12)
+m.vec <- rep(NA, M)
+
+# First plot
+dat <- rbinom(n, size = 1, prob = 0.56)
+curve(L(x, dat), col = colo[1], lwd = 4, #ylim = c(0, 2e-8),
+      xlab = "p", ylab = " ", yaxt = "n", 
+      main = "Bernoulli Likelihood Variability")
+points(mean(dat), L(mean(dat), dat), pch = 21, bg = "white", cex = 2)
+text(mean(dat), L(mean(dat), dat), 1, cex = .6)
+m.vec[1] <- mean(dat)
+# Main loop
+for (m in 2:M){
+  dat <- rbinom(n, size = 1, prob = 0.56)
+  curve(L(x, dat), col = colo[m], lwd = 4, add = TRUE)
+  points(mean(dat), L(mean(dat), dat), pch = 21, bg = "white", cex = 2)
+  text(mean(dat), L(mean(dat), dat), m, cex = .6)
+  m.vec[m] <- mean(dat)
+}
+
+# Take a look at the MLE
+round(m.vec, 3)
+
+# Optimization in R: Basic examples ---------------------------------------
+
+### 1D optimization problems: optimize()
+
+# Define a simple test function
+test.fun <- function(x) x^2
+
+# Plot
+curve(test.fun(x), -1, 1, lwd = 4, type="l", col="orchid",
+      xlab = "x", ylab = "f(x)", main = expression(f(x) == x^2))
+grid()
+
+?optimize
+ans <- optimize(test.fun, lower = -1, upper = 1, 
+               maximum = FALSE)
+class(ans)
+names(ans)
+ans$minimum # essentially
+
+### Multidimensional optimization problems: optim()
+
+# Notice that the function to be optimized must take
+# a single argument that collects all its inputs
+test.fun <- function(theta) theta[1]^2 + theta[2]^2
+
+# Set starting values for optimizer
+?optim
+
+# Initial value
+theta.0 <- c(1,1)
+# Use an approximate quasi-newton method known as BFGS:
+# Broyden–Fletcher–Goldfarb–Shanno algorithm.
+ans <- optim(par = theta.0, fn = test.fun,
+            method = "BFGS")
+class(ans)
+names(ans)
+ans$par # again, essentially 0
+
+# Optimizing a Normal Likelihood ------------------------------------------
+
+# Get some data from base R
+data("airquality")
+?airquality
+str(airquality)
+
+# Focus on Wind
+x <- airquality$Wind
+n <- length(x)
+
+# MLE: complete dataset
+mle <- c(mean = mean(x), var = ((n - 1)/n)*var(x) )
+mle
+
+# <optim> is a minimizer so we pass -1*log-likelihood
+loglike.normal = function(theta, x) {
+  # theta   parameters c(mu,sig2)
+  # x       vector of data
+  mu = theta[1]
+  sig2 = theta[2]
+  n = length(x)
+  a1 = -(n/2)*log(2*pi)-(n/2)*log(sig2)
+  a2 = -1/(2*sig2)
+  y = (x - mu)^2
+  ans = a1+a2*sum(y)
+  # return -1 * loglike
+  return(-ans) 
+}
+
+# One interesting by-product of this class of methods is
+# that, at each iteration <k>, they internally evaluate numerically 
+# the matrix of 2nd derivatives of the objective function (Hessian) 
+# at the current solution \theta^{(k)}.
+#
+# When the objective function is the -log.likelihood, its Hessian
+# is linked to the Fisher information matrix and can be used to build
+# asymptotic standard errors (and confidence sets) for our estimator.
+
+# Compute MLE and get approximate standard errors.
+theta.0 = c(5,5)
+ans = optim(par = theta.0, fn = loglike.normal, 
+            x = x, method = "BFGS", hessian = TRUE)
+names(ans)
+mle     # exact MLE's
+ans$par # approximate MLE's
+ans$hessian
+se.mle = sqrt(diag(solve(ans$hessian)))
+se.mle
+
+# The ‘maxLik' package ----------------------------------------------------
+
+# Use maxLik() function from <maxLik> package
+# Here function to compute log-likelihood returns log-likelihood values
+# and not -1*log-likelihood values
+library(maxLik)
+?maxLik
+
+# log-likelihood function
+loglike.normal <- function(theta, x){
+  # theta :: parameters c(mu, sig2)
+  # x     :: vector of data
+  mu   <- theta[1]
+  sig2 <- theta[2]
+  n    <- length(x)
+  a1   <- -(n/2)*log(2*pi)-(n/2)*log(sig2)
+  a2   <- -1/(2*sig2)
+  y    <- (x - mu)^2
+  ans  <- a1 + a2*sum(y)
+  return(ans) 
+}
+
+# Starting value
+theta.0        <- c(5,5)
+names(theta.0) <- c("mu","sig2")
+
+# Run
+theta.mle <- maxLik(loglike.normal, 
+                   start = theta.0, x = x)
+class(theta.mle)
+names(theta.mle)
+theta.mle
+summary(theta.mle)
+
+# The 'fitdistr' function -------------------------------------------------
+
+### Dataset 01
+data("airquality")
+?airquality
+str(airquality)
+
+# Focus on Wind
+x <- airquality$Wind
+n <- length(x)
+
+# MLE: complete dataset
+mle <- c( mean = mean(x), var = ((n - 1)/n)*var(x) )
+mle
+
+# Use the fitdistr() function
+library(MASS)
+?fitdistr
+fitdistr(x, "normal")  # Fit a Gaussian
+fitdistr(x, "t")       # Fit a Student-t
+
+### Dataset 02
+data("quakes")
+?quakes
+x <- quakes$mag # Focus on magnitude
+
+# Take a look: hist + density + rug + Gaussian fit
+# pdf("quake-data.pdf", height = 8, width =  7)
+hist(x, prob = T, col = "pink", border = "white", 
+     main = "Earthquakes off Fiji: Magnitude", 
+     xlab = "Richter Magnitude"
+)
+lines(density(x), col = "orchid", lty = 3, lwd = 6)
+rug(x); box()
+
+# Gamma & Lognormal fits (+ standard error)
+gfit <- fitdistr(x, "gamma"); gfit
+lfit <- fitdistr(x, "lognormal"); lfit
+names(gfit); names(lfit)
+gfit$vcov
+
+# Add fit
+curve(dgamma(x, gfit$estimate["shape"], gfit$estimate["rate"]), 
+      lwd = 5, col = "palevioletred3", add = T)
+curve(dlnorm(x, lfit$estimate["meanlog"], lfit$estimate["sdlog"]), 
+      lwd = 5, col = "palevioletred4", add = T)
+legend("topright", c("Kernel density", "Gamma fit", "LogNormal fit"),
+       col = c("orchid", "palevioletred3", "palevioletred4"), 
+       lty = c(3,1,1), lwd = 5, bty = "n", cex = .8)
+
+### Under a gamma-model, the pop-mean is equal to: tau = shape/rate
+
+# By equivariance
+a_mle   <- gfit$estimate["shape"]
+b_mle   <- gfit$estimate["rate"]
+tau_mle <- a_mle/b_mle
+tau_mle
+# inherits the name attribute "shape"
+attributes(tau_mle)
+names(tau_mle)
+# Many ways to remove it:
+# 1 # attributes(tau_mle) <- NULL
+# 2 # names(tau_mle) <- NULL
+tau_mle <- as.vector(tau_mle)
+tau_mle
+
+# Confidence interval for the pop-mean via **multivariate delta-method**
+my_grad     <- function(a, b) as.vector( c( 1/b, -a/(b^2) ) )
+my_grad_hat <- my_grad(a_mle, b_mle)
+my_grad_hat 
+V_hat       <- gfit$vcov
+se_tau      <- as.numeric( sqrt( t(my_grad_hat) %*% V_hat %*% my_grad_hat ) )
+se_tau
+
+alpha <- 0.01
+z     <- -qnorm(alpha/2)
+round( tau_mle + c(-1,+1)*z*se_tau, 3)
+
+# Annotate the (current/last) plot
+rect(xleft  = tau_mle - z*se_tau, ybottom = 0, 
+     xright = tau_mle + z*se_tau, ytop = 2,
+     border = rgb(0,0,0,.5), col = rgb(0,0,0,.2))
+points(tau_mle, 0, pch = 21, cex = .7,
+       col = rgb(0,0,0,.5), bg = "palevioletred3")
+
+# More advanced models ----------------------------------------------------
+
+# install.packages("fitdistrplus")
+library(fitdistrplus)
+library(help = fitdistrplus)
+# More info: check online vignettes
+# url: https://cran.r-project.org/web/packages/fitdistrplus/index.html
