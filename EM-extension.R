@@ -17,6 +17,7 @@ sum.row <- function(A){
 } 
 
 
+
 handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k)
 {
   
@@ -25,7 +26,7 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k)
     cols     <- c(rgb(1,0,0,.3), rgb(0,1,0,.3), rgb(0,0,1,.3))
     like <- like + p[i]*dnorm(y, mu[i], sigma[i])
   }
-
+  
   deviance <- -2*sum(log(like))
   res      <- matrix(NA,n_iter + 1, 2+3*k)
   res[1,]  <- c(0, p, mu, sigma, deviance)
@@ -35,12 +36,8 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k)
   for (iter in 1:n_iter) {
     
     # E step
-    for (j in 1:k) {
-      d_tot[j,] <- p[j]*dnorm(y, mu[j], sigma[j])
-    }
-    for (j in 1:k) {
-      r_tot[j,] <- d_tot[j,]/sum.row(d_tot)
-    }
+    for (j in 1:k) {d_tot[j,] <- p[j]*dnorm(y, mu[j], sigma[j])}
+    for (j in 1:k) {r_tot[j,] <- d_tot[j,]/sum.row(d_tot)}
     
     # M step
     for (j in 1:k){
@@ -52,36 +49,53 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k)
     
     # -2 x log-likelihood (a.k.a. deviance)
     like <- 0
-    for (i in 1:k){
-      like <- like + p[i]*dnorm(y, mu[i], sigma[i])
-    } 
+    for (i in 1:k){like <- like + p[i]*dnorm(y, mu[i], sigma[i])} 
     deviance <- -2*sum( log(like) )
     
     # Save
     res[iter+1,] <- c(iter, p, mu, sigma, deviance)
     
     # Plot
-    if (plot_flag){
-      hist(y, prob = T, col = gray(.8), breaks=50, border = NA, 
-           main = "", xlab = paste("EM Iteration: ", iter, "/", n_iter, sep = ""))
+    if (plot_flag && iter==n_iter){
+      hist(y, prob = T, breaks=100, 
+           col = "pink", border = "white",
+           main = "Bart Simpson Density", xlab = paste("EM Iteration: ", iter, "/", n_iter, sep = ""))
       set.seed(123)
       points(jitter(y), rep(0,length(y)), 
-             pch = 19, cex = .6, 
-             #col = cols[ (dnorm(y,mu[1],sigma[1]) > dnorm(y,mu[2],sigma[2]))],
-             )
+             pch = 19, cex = .6 )
       
-      likefunction <- function(y){
-        like <- 0
-        for (i in 1:k){
-          #cols     <- c(rgb(1,0,0,.3), rgb(0,1,0,.3), rgb(0,0,1,.3))
-          like <- like + p[i]*dnorm(y, mu[i], sigma[i])
-        }
-        return(like)
-      }
+     likefunction <- function(y){
+       like <- 0
+       for (i in 1:k){
+         like <- like + p[i]*dnorm(y, mu[i], sigma[i])
+       }
+       return(like)
+     }
       
+     # add curves, colors and legend
+      cols = rep(NA,k+1) 
+      cols[k+1] = "orange"
+      # #iterate to plot every distribution
+      for (i in 1:k) {
+        cols[i] = rgb(runif(1),runif(1),runif(1),.8)
+        curve(p[i]*dnorm(x,mu[i],sigma[i]),
+                            lwd = 3,
+                            lty = 5,
+                            col = cols[i],
+                            add = TRUE)}
+      # add the join distribution
       curve(likefunction(x),
-            lwd = 4, col = rgb(0,0,0,.5), add = TRUE)
-      Sys.sleep(1.5)
+            lwd = 4, col = "orange", add = TRUE)
+      # add the legend
+      legendlabels=rep(NA,k+1)
+      for (i in 1:k){legendlabels[i]=paste("Distribution ", i)}
+      legendlabels[k+1] = "joint "
+      
+      legend('topright',legend=legendlabels,
+             col=cols, lty=1, cex=0.6)
+      grid()
+      
+      #Sys.sleep(1.5)
     }
   }
   res <- data.frame(res)
@@ -91,36 +105,65 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k)
 }
 
 
-n <- 250 # Sample size
+n <- 10000 # Sample size
+K=6 # number of ditributions
 XX <- rnormmix(n,
                lambda = c(0.5, rep(0.1,5)),
                mu = c(0, ((0:4)/2)-1),
                sigma = c(1, rep(0.1,5)) )
 
 hist(XX, prob = T, col = "pink",
-     border = "white", breaks = 50, 
+     border = "white", breaks = 100, 
      main = "Bart Simpson", 
      xlab = "")
 
 hem_fit <- handmade.em(XX, 
-                       p      = c(.5,.5),#c(.3, .2, .5),#c(.3, .2, .1,.25,.15), 
-                       mu     = c(-2,2),#c(-2,0,1),#c(45,55,50, 48, 46), 
-                       sigma  = c(2,2),#c(2,2,2),#c(8,8, 8, 8, 8), 
-                       n_iter = 20,
+                       p      = rep(1/K,K), 
+                       mu     = c(.4,.1,-.8,-.2,.8,.1),
+                       sigma  = c(.1,.1,.4,.1,.6,.8), 
+                       n_iter = 150,
                        plot_flag = T,
-                       k=2)
+                       k=K)
 round( hem_fit$parameters, 3 )
 hem_fit$deviance
 
-#data("faithful")
-#?faithful
-#hem_fit <- handmade.em(faithful$eruptions, 
-#                       p      = c(.3, .2, .5),#c(.3, .2, .1,.25,.15), 
-#                       mu     = c(45,55,50),#c(45,55,50, 48, 46), 
-#                       sigma  = c(8,8,8),#c(8,8, 8, 8, 8), 
-#                       n_iter = 10,
-#                       plot_flag = T,
-#                       k=3)
-#round( hem_fit$parameters, 3 )
-#hem_fit$deviance
-#
+
+# AIC ---------------------------------------------------------------------
+
+
+likefunction <- function(y, hem_fit){
+  n_gauss = length(hem_fit$parameters)/3
+  p = hem_fit$parameters[1:n_gauss]
+  mu = hem_fit$parameters[(n_gauss+1):(n_gauss*2)]
+  sigma = hem_fit$parameters[(n_gauss*2+1):(n_gauss*3)]
+  like <- 0
+  for (i in 1:n_gauss){
+    like <- like + p[i]*dnorm(y, mu[i], sigma[i])
+  }
+  return(log(like))
+}
+
+ll <- likefunction(XX, hem_fit)
+
+for (i in 1:10){
+  hem_fit <- handmade.em(XX, 
+                         p      = rep(1/i,i), 
+                         mu     = runif(i, min=-1,max=1),
+                         sigma  = runif(i, min=.1,max=1), 
+                         n_iter = 1500,
+                         plot_flag = T,
+                         k=i)
+  ll <- likefunction(XX, hem_fit)
+  
+  AIC <- -2*sum(ll)+2*length(hem_fit$parameters)
+  print(c(AIC,length(hem_fit$parameters)))
+}
+
+
+AIC <- -2*mean(ll)+2*length(hem_fit$parameters)
+c(AIC,length(hem_fit$parameters))
+library(stats)
+?AIC
+AIC(ll,k=2)
+
+
