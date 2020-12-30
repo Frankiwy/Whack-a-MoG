@@ -60,7 +60,7 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k)
       hist(y, prob = T, breaks=100, 
            col = "pink", border = "white",
            main = "Bart Simpson Density", xlab = paste("EM Iteration: ", iter, "/", n_iter, sep = ""))
-      set.seed(123)
+
       points(jitter(y), rep(0,length(y)), 
              pch = 19, cex = .6 )
       
@@ -105,7 +105,7 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k)
 }
 
 
-n <- 10000 # Sample size
+n <- 3000 # Sample size
 K=6 # number of ditributions
 XX <- rnormmix(n,
                lambda = c(0.5, rep(0.1,5)),
@@ -145,19 +145,33 @@ likefunction <- function(y, hem_fit){
 
 ll <- likefunction(XX, hem_fit)
 
-for (i in 1:10){
-  hem_fit <- handmade.em(XX, 
-                         p      = rep(1/i,i), 
-                         mu     = runif(i, min=-1,max=1),
-                         sigma  = runif(i, min=.1,max=1), 
-                         n_iter = 1500,
-                         plot_flag = T,
-                         k=i)
-  ll <- likefunction(XX, hem_fit)
-  
-  AIC <- -2*sum(ll)+2*length(hem_fit$parameters)
-  print(c(AIC,length(hem_fit$parameters)))
+M <- 30
+k_max <- 10
+results=rep(0,k_max)
+for (j in 1:M){
+  n <- 5000 # Sample size
+  XX <- rnormmix(n,
+                 lambda = c(0.5, rep(0.1,5)),
+                 mu = c(0, ((0:4)/2)-1),
+                 sigma = c(1, rep(0.1,5)) )
+  for (i in 1:k_max){
+    hem_fit <- handmade.em(XX, 
+                           p      = rep(1/i,i), 
+                           mu     = runif(i,min=-1.5,max=1.5),
+                           sigma  = runif(i,min=0.1,max=0.4), 
+                           n_iter = 500,
+                           plot_flag = T,
+                           k=i)
+    ll <- likefunction(XX, hem_fit)
+    
+    AIC <- -2*sum(ll)+2*length(hem_fit$parameters)
+    #print(c(AIC,length(hem_fit$parameters)/3))
+    results[length(hem_fit$parameters)/3]=results[length(hem_fit$parameters)/3]+AIC
+  }
+  remove(XX)
+  print(which.min(results))
 }
+
 
 
 AIC <- -2*mean(ll)+2*length(hem_fit$parameters)
