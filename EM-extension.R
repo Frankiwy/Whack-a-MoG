@@ -18,7 +18,7 @@ sum.row <- function(A){
 
 
 
-handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k)
+handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m)
 {
   
   like <- 0
@@ -59,7 +59,7 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k)
     if (plot_flag && iter==n_iter){
       hist(y, prob = T, breaks=100, 
            col = "pink", border = "white",
-           main = "Bart Simpson Density", xlab = paste("EM Iteration: ", iter, "/", n_iter, sep = ""))
+           main = paste("Bart Simpson Density, M=",m), xlab = paste("EM Iteration: ", iter, "/", n_iter, sep = ""))
 
       points(jitter(y), rep(0,length(y)), 
              pch = 19, cex = .6 )
@@ -100,32 +100,35 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k)
   }
   res <- data.frame(res)
   #names(res) <- c("iteration","p1","p2","mu1","mu2","sigma1","sigma2","deviance")
-  out <- list(parameters = c(p = p, mu = mu, sigma = sigma), deviance = deviance, res = res)
+  out <- list(parameters = c(p = p, mu = mu, sigma = sigma),
+              deviance = deviance, 
+              res = res,
+              ll = like)
   return(out)
 }
 
 
-n <- 3000 # Sample size
-K=6 # number of ditributions
-XX <- rnormmix(n,
-               lambda = c(0.5, rep(0.1,5)),
-               mu = c(0, ((0:4)/2)-1),
-               sigma = c(1, rep(0.1,5)) )
-
-hist(XX, prob = T, col = "pink",
-     border = "white", breaks = 100, 
-     main = "Bart Simpson", 
-     xlab = "")
-
-hem_fit <- handmade.em(XX, 
-                       p      = rep(1/K,K), 
-                       mu     = c(.4,.1,-.8,-.2,.8,.1),
-                       sigma  = c(.1,.1,.4,.1,.6,.8), 
-                       n_iter = 150,
-                       plot_flag = T,
-                       k=K)
-round( hem_fit$parameters, 3 )
-hem_fit$deviance
+#n <- 3000 # Sample size
+#K=6 # number of ditributions
+#XX <- rnormmix(n,
+#               lambda = c(0.5, rep(0.1,5)),
+#               mu = c(0, ((0:4)/2)-1),
+#               sigma = c(1, rep(0.1,5)) )
+#
+#hist(XX, prob = T, col = "pink",
+#     border = "white", breaks = 100, 
+#     main = "Bart Simpson", 
+#     xlab = "")
+#
+#hem_fit <- handmade.em(XX, 
+#                       p      = rep(1/K,K), 
+#                       mu     = c(.4,.1,-.8,-.2,.8,.1),
+#                       sigma  = c(.1,.1,.4,.1,.6,.8), 
+#                       n_iter = 150,
+#                       plot_flag = T,
+#                       k=K)
+#round( hem_fit$parameters, 3 )
+#hem_fit$deviance
 
 
 # AIC ---------------------------------------------------------------------
@@ -143,13 +146,16 @@ likefunction <- function(y, hem_fit){
   return(log(like))
 }
 
-ll <- likefunction(XX, hem_fit)
+#ll <- likefunction(XX, hem_fit)
 
-M <- 30
+M <- 10
 k_max <- 10
-results=rep(0,k_max)
+AIC_results=rep(0,k_max)
+AIC_model= rep(0,k_max)
+BIC_results=rep(0,k_max)
+BIC_model= rep(0,k_max)
 for (j in 1:M){
-  n <- 5000 # Sample size
+  n <- 1000 # Sample size
   XX <- rnormmix(n,
                  lambda = c(0.5, rep(0.1,5)),
                  mu = c(0, ((0:4)/2)-1),
@@ -159,25 +165,28 @@ for (j in 1:M){
                            p      = rep(1/i,i), 
                            mu     = runif(i,min=-1.5,max=1.5),
                            sigma  = runif(i,min=0.1,max=0.4), 
-                           n_iter = 500,
+                           n_iter = 100,
                            plot_flag = T,
-                           k=i)
-    ll <- likefunction(XX, hem_fit)
+                           k=i,
+                           m=j)
+    ll <- likefunction(XX, hem_fit) # compute log-likelihood
     
-    AIC <- -2*sum(ll)+2*length(hem_fit$parameters)
-    #print(c(AIC,length(hem_fit$parameters)/3))
-    results[length(hem_fit$parameters)/3]=results[length(hem_fit$parameters)/3]+AIC
+    AIC <- round(-2*sum(ll)+2*length(hem_fit$parameters),2) # compute AIC
+    BIC <- round(ll - (log(n)/n)*length(hem_fit$parameters),2) # compute BIC
+    
+    AIC_results[length(hem_fit$parameters)/3]=AIC_results[length(hem_fit$parameters)/3]+AIC # compute cumulative AIC over all models
+    BIC_results[length(hem_fit$parameters)/3]=BIC_results[length(hem_fit$parameters)/3]+BIC # compute cumulative BIC over all models
   }
   remove(XX)
-  print(which.min(results))
+  AIC_model[j] = which.min(AIC_results) # store best model based on AIC
+  BIC_model[j] = which.min(BIC_results) # store best model based on BIC
+  print(paste('AIC:',which.min(AIC_results), '& BIC:', which.min(BIC_results)))
 }
 
-
-
-AIC <- -2*mean(ll)+2*length(hem_fit$parameters)
-c(AIC,length(hem_fit$parameters))
-library(stats)
-?AIC
-AIC(ll,k=2)
+#AIC <- -2*mean(ll)+2*length(hem_fit$parameters)
+#c(AIC,length(hem_fit$parameters))
+#library(stats)
+#?AIC
+#AIC(ll,k=2)
 
 
