@@ -1,5 +1,5 @@
 suppressMessages(require(mixtools, quietly = T))
-
+set.seed(1235)
 
 rep.row<-function(x,n){
   matrix(rep(x,each=n),nrow=n)
@@ -110,13 +110,13 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m){
 }
 
 
-n <- 3000 # Sample size
-#K=6 # number of ditributions
-XX <- rnormmix(n,
-               lambda = c(0.5, rep(0.1,5)),
-               mu = c(0, ((0:4)/2)-1),
-               sigma = c(1, rep(0.1,5)) )
-
+#n <- 3000 # Sample size
+##K=6 # number of ditributions
+#XX <- rnormmix(n,
+#               lambda = c(0.5, rep(0.1,5)),
+#               mu = c(0, ((0:4)/2)-1),
+#               sigma = c(1, rep(0.1,5)) )
+#
 #hist(XX, prob = T, col = "pink",
 #     border = "white", breaks = 100, 
 #     main = "Bart Simpson", 
@@ -172,6 +172,7 @@ big_n = gen_distr(3000,10)
 set.seed(1235)
 for (j in 1:M){
   XX <- small_n[[j]]
+  n <- length(XX) # MANCA QUESTO
   for (i in 1:k_max){
     hem_fit <- handmade.em(XX, 
                            p      = rep(1/i,i), 
