@@ -18,16 +18,20 @@ sum.row <- function(A){
 
 
 
-handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m)
-{
+handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m){
   
-  like <- 0
-  for (i in 1:k){
-    cols     <- c(rgb(1,0,0,.3), rgb(0,1,0,.3), rgb(0,0,1,.3))
-    like <- like + p[i]*dnorm(y, mu[i], sigma[i])
+  #function to compute the likelihood function
+  likefunction <- function(y){
+    like <- 0
+    for (i in 1:k){
+      like <- like + p[i]*dnorm(y, mu[i], sigma[i])
+    }
+    return(like)
   }
   
-  deviance <- -2*sum(log(like))
+  like <- likefunction(y) # compute likelihood
+  deviance <- -2*sum(log(like)) # compute deviance
+  
   res      <- matrix(NA,n_iter + 1, 2+3*k)
   res[1,]  <- c(0, p, mu, sigma, deviance)
   
@@ -48,8 +52,7 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m)
     }
     
     # -2 x log-likelihood (a.k.a. deviance)
-    like <- 0
-    for (i in 1:k){like <- like + p[i]*dnorm(y, mu[i], sigma[i])} 
+    like <- likefunction(y) 
     deviance <- -2*sum( log(like) )
     
     # Save
@@ -64,13 +67,13 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m)
       points(jitter(y), rep(0,length(y)), 
              pch = 19, cex = .6 )
       
-     likefunction <- function(y){
-       like <- 0
-       for (i in 1:k){
-         like <- like + p[i]*dnorm(y, mu[i], sigma[i])
-       }
-       return(like)
-     }
+     #likefunction <- function(y){
+     #  like <- 0
+     #  for (i in 1:k){
+     #    like <- like + p[i]*dnorm(y, mu[i], sigma[i])
+     #  }
+     #  return(like)
+     #}
       
      # add curves, colors and legend
       cols = rep(NA,k+1) 
@@ -102,19 +105,18 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m)
   #names(res) <- c("iteration","p1","p2","mu1","mu2","sigma1","sigma2","deviance")
   out <- list(parameters = c(p = p, mu = mu, sigma = sigma),
               deviance = deviance, 
-              res = res,
-              ll = like)
+              res = res)
   return(out)
 }
 
 
-#n <- 3000 # Sample size
+n <- 3000 # Sample size
 #K=6 # number of ditributions
-#XX <- rnormmix(n,
-#               lambda = c(0.5, rep(0.1,5)),
-#               mu = c(0, ((0:4)/2)-1),
-#               sigma = c(1, rep(0.1,5)) )
-#
+XX <- rnormmix(n,
+               lambda = c(0.5, rep(0.1,5)),
+               mu = c(0, ((0:4)/2)-1),
+               sigma = c(1, rep(0.1,5)) )
+
 #hist(XX, prob = T, col = "pink",
 #     border = "white", breaks = 100, 
 #     main = "Bart Simpson", 
@@ -154,39 +156,89 @@ AIC_results=rep(0,k_max)
 AIC_model= rep(0,k_max)
 BIC_results=rep(0,k_max)
 BIC_model= rep(0,k_max)
+
+
+gen_distr <- function(n, M){
+  distr = list()
+  for (j in 1:M) distr[[j]] = rnormmix(n, lambda = c(0.5, rep(0.1,5)),
+                                        mu = c(0, ((0:4)/2)-1), sigma = c(1, rep(0.1,5)) )
+  return(distr)
+}
+
+small_n = gen_distr(750,10)
+big_n = gen_distr(3000,10)
+
+
+set.seed(1235)
 for (j in 1:M){
-  n <- 1000 # Sample size
-  XX <- rnormmix(n,
-                 lambda = c(0.5, rep(0.1,5)),
-                 mu = c(0, ((0:4)/2)-1),
-                 sigma = c(1, rep(0.1,5)) )
+  XX <- small_n[[j]]
   for (i in 1:k_max){
     hem_fit <- handmade.em(XX, 
                            p      = rep(1/i,i), 
                            mu     = runif(i,min=-1.5,max=1.5),
                            sigma  = runif(i,min=0.1,max=0.4), 
-                           n_iter = 100,
+                           n_iter = 500,
                            plot_flag = T,
                            k=i,
                            m=j)
     ll <- likefunction(XX, hem_fit) # compute log-likelihood
     
     AIC <- round(-2*sum(ll)+2*length(hem_fit$parameters),2) # compute AIC
-    BIC <- round(ll - (log(n)/n)*length(hem_fit$parameters),2) # compute BIC
+    BIC <- round(-2*sum(ll) + log(n)*length(hem_fit$parameters),2) # compute BIC
     
-    AIC_results[length(hem_fit$parameters)/3]=AIC_results[length(hem_fit$parameters)/3]+AIC # compute cumulative AIC over all models
-    BIC_results[length(hem_fit$parameters)/3]=BIC_results[length(hem_fit$parameters)/3]+BIC # compute cumulative BIC over all models
+    AIC_results[length(hem_fit$parameters)/3]=AIC #AIC_results[length(hem_fit$parameters)/3]+AIC # compute cumulative AIC over all models
+    BIC_results[length(hem_fit$parameters)/3]=BIC #BIC_results[length(hem_fit$parameters)/3]+BIC # compute cumulative BIC over all models
+    
   }
+  print(AIC_results)
+  print(BIC_results)
+  
   remove(XX)
   AIC_model[j] = which.min(AIC_results) # store best model based on AIC
   BIC_model[j] = which.min(BIC_results) # store best model based on BIC
   print(paste('AIC:',which.min(AIC_results), '& BIC:', which.min(BIC_results)))
 }
 
-#AIC <- -2*mean(ll)+2*length(hem_fit$parameters)
-#c(AIC,length(hem_fit$parameters))
-#library(stats)
-#?AIC
-#AIC(ll,k=2)
+
+# Cross-Validaton ---------------------------------------------------------
+
+
+cv <- function(x, k_fold){
+  dataset <- x # copy the data set
+  l = length(dataset) # get its length
+  folds <- list() # list will contain all folds
+  size <- as.integer(l/k_fold) # size of each fold
+  for (n in 1:k_fold){ # iterate over all the desired folders
+    fold_elements = c() # vector that will store elements
+    while (length(fold_elements) < size){ # iterate until the fold size is reached
+      idx_elm = sample(1:l, 1) # get index element
+      fold_elements = c(fold_elements, dataset[idx_elm]) # add element to the vector
+      dataset = dataset[-idx_elm] # drop element from data set
+      l = length(dataset) # recompute the length
+    }
+    folds[[n]] = fold_elements  # add vector(representing the folder) to the folder list
+  }
+  #print(l)
+  if (l != 0){# if there are still data points
+    for (m in 1:l){ #assign them one by one to the folders until are done
+      #print(m)
+      folds[[m]] = c(folds[[m]], dataset[1]) # assign a data point to folder m
+      dataset = dataset[-1] # delete it from the data set
+    }
+  }
+  #print(length(data set))
+  return(folds)
+}
+
+k_cv = cv(XX, 9)
+#k_cv
+for (i in 1:length(k_cv))print(length(k_cv[[i]]))
+
+
+
+
+
+
+
 
 
