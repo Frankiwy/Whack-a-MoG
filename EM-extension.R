@@ -51,7 +51,7 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m){
       r = r_tot[j,]
       p[j]     <- mean(r)
       mu[j]    <- sum(r*y)/sum(r)
-      sigma[j] <-sqrt( sum(r*(y^2))/sum(r) - (mu[j])^2 ) +1.0e-10
+      sigma[j] <-sqrt( sum(r*(y^2))/sum(r) - (mu[j])^2 ) +1.0e-8
     }
     
     # -2 x log-likelihood (a.k.a. deviance)
@@ -170,7 +170,7 @@ gen_distr <- function(n, M){
 
 small_n = gen_distr(750,10)
 big_n = gen_distr(3000,10)
-init_num = 1
+init_num = 5
 
 set.seed(1235)
 for (j in 1:M){
@@ -178,7 +178,7 @@ for (j in 1:M){
   n <- length(XX) # MANCA QUESTO
   for (i in 1:k_max){
     
-    ll <- -Inf
+    ll_sum <- -Inf
     
     for (w in 1:init_num){
       hem_fit_temp <- handmade.em(XX, 
@@ -186,12 +186,14 @@ for (j in 1:M){
                              mu     = runif(i,min=-1.5,max=1.5),
                              sigma  = runif(i,min=0.1,max=0.4), 
                              n_iter = 200,
-                             plot_flag = T,
+                             plot_flag = F,
                              k=i,
                              m=j)
-      ll_temp <- likefunction(XX, hem_fit) # compute log-likelihood
-      if (sum(ll_temp) > ll) {
+      ll_temp<- likefunction(XX, hem_fit_temp) # compute log-likelihood
+      print(ll_temp)
+      if (sum(ll_temp) > ll_sum) {
         ll <- ll_temp
+        ll_sum <- sum(ll)
         hem_fit <- hem_fit_temp
       }
       
