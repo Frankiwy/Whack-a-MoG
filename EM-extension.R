@@ -39,21 +39,24 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m){
   r_tot <- rep.row(rep(NA,length(y)),k)
   for (iter in 1:n_iter) {
     
-    # E step
+    # E step (get responsibilities)
+    # responsibility = proportion times the Gaussian over the 2 found parameters
     for (j in 1:k) {d_tot[j,] <- p[j]*dnorm(y, mu[j], sigma[j])}
-    for (j in 1:k) {r_tot[j,] <- d_tot[j,]/sum.row(d_tot)}
+    # getting optimal hidden state (since it is proportionality we need to normalize) distribution
+    for (j in 1:k) {r_tot[j,] <- d_tot[j,]/sum.row(d_tot)} 
     
     # M step
+    # here we compute the pi, mean sigma for each responsibility
     for (j in 1:k){
       r = r_tot[j,]
       p[j]     <- mean(r)
       mu[j]    <- sum(r*y)/sum(r)
-      sigma[j] <-sqrt( sum(r*(y^2))/sum(r) - (mu[j])^2 )
+      sigma[j] <-sqrt( sum(r*(y^2))/sum(r) - (mu[j])^2 ) +1.0e-10
     }
     
     # -2 x log-likelihood (a.k.a. deviance)
-    like <- likefunction(y) 
-    deviance <- -2*sum( log(like) )
+    like <- likefunction(y) # update likelihood 
+    deviance <- -2*sum( log(like) )# update deviance
     
     # Save
     res[iter+1,] <- c(iter, p, mu, sigma, deviance)
@@ -167,22 +170,32 @@ gen_distr <- function(n, M){
 
 small_n = gen_distr(750,10)
 big_n = gen_distr(3000,10)
-
+init_num = 1
 
 set.seed(1235)
 for (j in 1:M){
   XX <- small_n[[j]]
   n <- length(XX) # MANCA QUESTO
   for (i in 1:k_max){
-    hem_fit <- handmade.em(XX, 
-                           p      = rep(1/i,i), 
-                           mu     = runif(i,min=-1.5,max=1.5),
-                           sigma  = runif(i,min=0.1,max=0.4), 
-                           n_iter = 500,
-                           plot_flag = T,
-                           k=i,
-                           m=j)
-    ll <- likefunction(XX, hem_fit) # compute log-likelihood
+    
+    ll <- -Inf
+    
+    for (w in 1:init_num){
+      hem_fit_temp <- handmade.em(XX, 
+                             p      = rep(1/i,i), 
+                             mu     = runif(i,min=-1.5,max=1.5),
+                             sigma  = runif(i,min=0.1,max=0.4), 
+                             n_iter = 200,
+                             plot_flag = T,
+                             k=i,
+                             m=j)
+      ll_temp <- likefunction(XX, hem_fit) # compute log-likelihood
+      if (sum(ll_temp) > ll) {
+        ll <- ll_temp
+        hem_fit <- hem_fit_temp
+      }
+      
+    }
     
     AIC <- round(-2*sum(ll)+2*length(hem_fit$parameters),2) # compute AIC
     BIC <- round(-2*sum(ll) + log(n)*length(hem_fit$parameters),2) # compute BIC
@@ -202,6 +215,13 @@ for (j in 1:M){
 
 
 # Cross-Validaton ---------------------------------------------------------
+
+n = 1000
+
+XX <- rnormmix(n,
+               lambda = c(0.5, rep(0.1,5)),
+               mu = c(0, ((0:4)/2)-1),
+               sigma = c(1, rep(0.1,5)) )
 
 
 cv <- function(x, k_fold){
