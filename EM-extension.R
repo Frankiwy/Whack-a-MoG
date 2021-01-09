@@ -174,117 +174,125 @@ gen_distr <- function(n, M){
 
 small_n = gen_distr(500,10)
 big_n = gen_distr(5000,10)
+
+data=big_n
+
 init_num = 5
 
+
 set.seed(1235)
-for (j in 1:M){
-  XX <- big_n[[j]]
-  n <- length(XX) 
-  for (i in 1:k_max){
-    
-    ll_sum <- -Inf
-    
-    for (w in 1:init_num){
-      #a=runif(i,min=1,max=10)
-      #a=a/sum(a)
-      hem_fit_temp <- handmade.em(XX, 
-                             p      = rep(1/i,i), 
-                             mu     = runif(i,min=-1.5,max=1.5),
-                             sigma  = runif(i,min=0.1,max=0.4), 
-                             n_iter = 500,
-                             plot_flag = T,
-                             k=i,
-                             m=j)
-      ll_temp<- likefunction(XX, hem_fit_temp) # compute log-likelihood
-      if (sum(ll_temp) > ll_sum) {
-        ll <- ll_temp
-        ll_sum <- sum(ll)
-        hem_fit <- hem_fit_temp
+
+AIC_BIC <-function(Dataset){
+  for (j in 1:M){
+    XX <- Dataset[[j]]
+    n <- length(XX) 
+    for (i in 1:k_max){
+      
+      ll_sum <- -Inf
+      
+      for (w in 1:init_num){
+        #a=runif(i,min=1,max=10)
+        #a=a/sum(a)
+        hem_fit_temp <- handmade.em(XX, 
+                               p      = rep(1/i,i), 
+                               mu     = runif(i,min=-1.5,max=1.5),
+                               sigma  = runif(i,min=0.1,max=0.4), 
+                               n_iter = 500,
+                               plot_flag = T,
+                               k=i,
+                               m=j)
+        ll_temp<- likefunction(XX, hem_fit_temp) # compute log-likelihood
+        if (sum(ll_temp) > ll_sum) {
+          ll <- ll_temp
+          ll_sum <- sum(ll)
+          hem_fit <- hem_fit_temp
+        }
+        
       }
+      n_par=length(hem_fit$parameters)-1
+      AIC <- round(-2*sum(ll)+2*n_par,2) # compute AIC
+      BIC <- round(-2*sum(ll) + log(n)*n_par,2) # compute BIC
+      
+      AIC_results[length(hem_fit$parameters)/3]=AIC #AIC_results[length(hem_fit$parameters)/3]+AIC # compute cumulative AIC over all models
+      BIC_results[length(hem_fit$parameters)/3]=BIC #BIC_results[length(hem_fit$parameters)/3]+BIC # compute cumulative BIC over all models
       
     }
-    n_par=length(hem_fit$parameters)-1
-    AIC <- round(-2*sum(ll)+2*n_par,2) # compute AIC
-    BIC <- round(-2*sum(ll) + log(n)*n_par,2) # compute BIC
+    print(AIC_results)
+    print(BIC_results)
     
-    AIC_results[length(hem_fit$parameters)/3]=AIC #AIC_results[length(hem_fit$parameters)/3]+AIC # compute cumulative AIC over all models
-    BIC_results[length(hem_fit$parameters)/3]=BIC #BIC_results[length(hem_fit$parameters)/3]+BIC # compute cumulative BIC over all models
-    
+    remove(XX)
+    AIC_model[j] = which.min(AIC_results) # store best model based on AIC
+    BIC_model[j] = which.min(BIC_results) # store best model based on BIC
+    print(paste('AIC:',which.min(AIC_results), '& BIC:', which.min(BIC_results)))
   }
-  print(AIC_results)
-  print(BIC_results)
-  
-  remove(XX)
-  AIC_model[j] = which.min(AIC_results) # store best model based on AIC
-  BIC_model[j] = which.min(BIC_results) # store best model based on BIC
-  print(paste('AIC:',which.min(AIC_results), '& BIC:', which.min(BIC_results)))
 }
+
+AIC_BIC(small_n)
+
 
 # Sample splitting ---------------------------------------------------------
 
 library(caret)
 #sample splitting with p=0.5
-for (j in 1:M)
-  {
-  dataset=big_n[[j]]
-  trainIndex<-createDataPartition(dataset, p = .50, 
-                      list = FALSE, 
-                      times = 1)
-  train <- dataset[trainIndex]
-  test <- dataset[-trainIndex]
-  
-  best_k=-1
-  best_ll=-Inf
-  
-  for (i in 1:k_max){
-    
-    ll_sum <- -Inf
-    
-    #THIS CYCLE KEEPS K FIXED AND IS HERE TO SELECT BETTER INITIALIZATIO FOR A FIXED K
-    for (w in 1:init_num)
-      {
-      #a=runif(i,min=1,max=10)
-      #a=a/sum(a)
-      hem_fit_temp <- handmade.em(train, 
-                                  p      = rep(1/i,i), 
-                                  mu     = runif(i,min=-1.5,max=1.5),
-                                  sigma  = runif(i,min=0.1,max=0.4), 
-                                  n_iter = 500,
-                                  plot_flag = T,
-                                  k=i,
-                                  m=j)
-      ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with TRAIN
-      ll_test<- likefunction(test, hem_fit_temp) # compute log-likelihood with TEST
-      if (sum(ll_train) > ll_sum) 
-        {
-          ll <- ll_test
-          ll_sum <- sum(ll_train)
-          hem_fit <- hem_fit_temp
-        }
-    }
-    #Now ll corresponds to the log-likelihood of the test dataset with the inizialization 
-    #data that had the best results on the train set
-    if (sum(ll) > best_ll) 
+
+sample_splitting <-function(train_size,small_or_big_set) {
+  for (j in 1:M)
     {
-      best_ll <- sum(ll)
-      best_k <- i
-    }
+    dataset=small_or_big_set[[j]]
+    trainIndex<-createDataPartition(dataset, p = train_size, 
+                        list = FALSE, 
+                        times = 1)
+    train <- dataset[trainIndex]
+    test <- dataset[-trainIndex]
+    best_k=-1
+    best_ll=-Inf
     
+    for (i in 1:k_max){
+      
+      ll_sum <- -Inf
+      
+      #THIS CYCLE KEEPS K FIXED AND IS HERE TO SELECT BETTER INITIALIZATION PARAMETERS FOR A FIXED K
+      for (w in 1:init_num)
+        {
+        #a=runif(i,min=1,max=10)
+        #a=a/sum(a)
+        hem_fit_temp <- handmade.em(train, 
+                                    p      = rep(1/i,i), 
+                                    mu     = runif(i,min=-1.5,max=1.5),
+                                    sigma  = runif(i,min=0.1,max=0.4), 
+                                    n_iter = 500,
+                                    plot_flag = T,
+                                    k=i,
+                                    m=j)
+        ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with TRAIN
+        ll_test<- likefunction(test, hem_fit_temp) # compute log-likelihood with TEST
+        if (sum(ll_train) > ll_sum) 
+          {
+            ll <- ll_test
+            ll_sum <- sum(ll_train)
+            hem_fit <- hem_fit_temp
+          }
+      }
+      #Now ll corresponds to the log-likelihood of the test dataset with the inizialization 
+      #data that had the best results on the train set
+      if (sum(ll) > best_ll) 
+      {
+        best_ll <- sum(ll)
+        best_k <- i
+      }
+      
+      
+    }
+    print(best_k)
     
   }
-  print(best_k)
-  
+
 }
 
+sample_splitting(0.50,big_n)
 
 # Cross-Validaton ---------------------------------------------------------
-
-n = 1000
-
-XX <- rnormmix(n,
-               lambda = c(0.5, rep(0.1,5)),
-               mu = c(0, ((0:4)/2)-1),
-               sigma = c(1, rep(0.1,5)) )
+  
 
 
 cv <- function(x, k_fold){
@@ -314,11 +322,90 @@ cv <- function(x, k_fold){
   return(folds)
 }
 
-k_cv = cv(XX, 9)
+k_cv = cv(small_n[[1]], 9)
 #k_cv
-for (i in 1:length(k_cv))print(length(k_cv[[i]]))
+for (i in 1:length(k_cv)) print(length(k_cv[[i]]))
+
+init_num=3
+cross_validation<-function(small_or_big_set,k_folds){
+  for (j in 1:M)
+  {
+    dataset=small_or_big_set[[j]]
+    k_cv=cv(dataset, k_folds)
+    
+    best_k=-1
+    best_ll=-Inf
+    
+    
+    for (i in 1:k_max)
+    { 
+      
+      
+      
+      ll_sum <- -Inf
+      
+      k_cv_results=rep(NA,k_folds)
+      
+      for (fold in 1:k_folds)
+        {
+        test=k_cv[[fold]]
+        train=do.call(c,k_cv[-fold])
+        
+        
+        ll_sum <- -Inf
+        
+        #THIS CYCLE KEEPS K FIXED AND IS HERE TO SELECT BETTER INITIALIZATION PARAMETERS FOR A FIXED K
+        for (w in 1:init_num)
+        {
+          #a=runif(i,min=1,max=10)
+          #a=a/sum(a)
+          hem_fit_temp <- handmade.em(train, 
+                                      p      = rep(1/i,i), 
+                                      mu     = runif(i,min=-1.5,max=1.5),
+                                      sigma  = runif(i,min=0.1,max=0.4), 
+                                      n_iter = 300,
+                                      plot_flag = T,
+                                      k=i,
+                                      m=j)
+          ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with TRAIN
+          ll_test<- likefunction(test, hem_fit_temp) # compute log-likelihood with TEST
+          if (sum(ll_train) > ll_sum) 
+          {
+            ll <- ll_test
+            ll_sum <- sum(ll_train)
+            hem_fit <- hem_fit_temp
+          }
+        }
+        #Now ll corresponds to the log-likelihood of the test dataset with the inizialization 
+        #data that had the best results on the train set
+        
+        k_cv_results[fold]=sum(ll_test)
+        
+        
+      }
+      print(k_cv_results)
+      ll_mean=mean(k_cv_results)
+      print(ll_mean)
+      print(" ")
+      
+      
+      
+      
+      if (ll_mean > best_ll) 
+      {
+        best_ll <- ll_mean
+        best_k <- i
+        
+      }
+      
+    }
+    print(best_k)  
+      
+  }
+}
 
 
+cross_validation(small_n,5)
 
 
 
