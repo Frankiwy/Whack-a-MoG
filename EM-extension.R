@@ -172,8 +172,8 @@ gen_distr <- function(n, M){
   return(distr)
 }
 
-small_n = gen_distr(500,10)
-big_n = gen_distr(5000,10)
+small_n = gen_distr(300,10)
+big_n = gen_distr(3000,10)
 
 data=big_n
 
@@ -326,7 +326,7 @@ k_cv = cv(small_n[[1]], 9)
 #k_cv
 for (i in 1:length(k_cv)) print(length(k_cv[[i]]))
 
-init_num=3
+init_num=5
 cross_validation<-function(small_or_big_set,k_folds){
   for (j in 1:M)
   {
@@ -408,8 +408,76 @@ cross_validation<-function(small_or_big_set,k_folds){
 cross_validation(small_n,5)
 
 
+# Wasserstein-based estimation ----------------------------------------------------
+
+my_quantile <-function(X,z)  quantile(X,prob=z,names=FALSE)
 
 
+Wasserstein_score <-function(small_or_big_set) {
+  
+  for (j in 1:M)
+  
+  {
+    #dataset=small_or_big_set[[j]]
+    
+    dataset=small_or_big_set[[j]]
+    trainIndex<-createDataPartition(dataset, p = 0.5, 
+                                    list = FALSE, 
+                                    times = 1)
+    train <- dataset[trainIndex]
+    test <- dataset[-trainIndex]
+    
+    Quantile_to_integrate_te <-function(z) my_quantile(dataset,z)
+    
+    for (i in 1:k_max){
+      
+      ll_sum <- -Inf
+      
+      #THIS CYCLE KEEPS K FIXED AND IS HERE TO SELECT BETTER INITIALIZATION PARAMETERS FOR A FIXED K
+      for (w in 1:init_num)
+      { hem_fit_temp <- handmade.em(train, 
+                                    p      = rep(1/i,i), 
+                                    mu     = runif(i,min=-1.5,max=1.5),
+                                    sigma  = runif(i,min=0.1,max=0.4), 
+                                    n_iter = 500,
+                                    plot_flag = T,
+                                    k=i,
+                                    m=j)
+        ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with TRAIN
+        
+        if (sum(ll_train) > ll_sum) 
+        {
+          ll <- ll_train
+          ll_sum <- sum(ll_train)
+          hem_fit <- hem_fit_temp
+        }
+      }
+      #Now ll corresponds to the log-likelihood of the train dataset with the inizialization 
+      #data that had the best results on the train set
+      
+      len=length(hem_fit$parameters)
+      prob=hem_fit$parameters[1:(len/3)]
+      means=hem_fit$parameters[(1+len/3):(2*len/3)]
+      sigmas=hem_fit$parameters[(2*len/3+1):len]
+      
+      Quantile_to_integrate_k <-function(z) qmixnorm(z, mean=means, pro=prob, sd=sigmas,expand=0.10)
+      
+      function_to_integrate <-function(z) abs(Quantile_to_integrate_te(z)-Quantile_to_integrate_k(z))
+      W_k=integrate(function_to_integrate,lower=0,upper=1,subdivisions = 10000)
+      
+      print(i)
+      print(W_k$value)
+      print(" ")
+    }
+  
+    
+ 
+  }
+  
+  
+}
+
+Wasserstein_score(big_n)
 
 
 
