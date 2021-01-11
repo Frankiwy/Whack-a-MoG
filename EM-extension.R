@@ -1,14 +1,46 @@
 suppressMessages(require(mixtools, quietly = T))
-set.seed(1235)
+
+gen_distr <- function(n, M){
+  distr = list()
+  for (j in 1:M) distr[[j]] = rnormmix(n, lambda = c(0.5, rep(0.1,5)),
+                                       mu = c(0, ((0:4)/2)-1), sigma = c(1, rep(0.1,5)) )
+  return(distr)
+}
+
+
+
+#Parameters in the code ------------------------------
+
+set.seed(1234)
+
+init_num=1 #Every function that calls the EM algorithm tries to initialiaze multiple times 
+#(for a fixed number of gaussians) and keeps the parameters that gave the best results
+#on the training sample (which for AIC and BIC coincides with the test sample).
+#Set this to 1 for a (much) faster run of the code.
+
+n_small=3 #number of small samples from the Bart.
+n_large=1 #number of large samples from the Bart.
+
+k_max=5 #The number of gaussians used for the MoG will be from 1 to k_max.
+
+small_n = gen_distr(100,n_small) #One can choose how many points will be in every small sample
+large_n = gen_distr(2000,n_large) #One can choose how many points will be in every large sample
+
+
+
+
+
+#Useful functions and other operations------------------------------------
+
+data=c(small_n,large_n) #We concatenate the lists of datasets
 
 rep.row<-function(x,n){
   matrix(rep(x,each=n),nrow=n)
 } # the function is used to pre-allocate the matrix 
 
-# the function is used to return a vecor where each entry is the sum of each element
-# at same column position but different row. The new vector is used as normalizing factor
-# to compute each d{kth}
-sum.row <- function(A){
+# the function is used to return a vector where each entry is the sum of each element
+# in that column.
+sum.columns <- function(A){
   res_vec <- rep(0, ncol(A))
   for (i in 1:nrow(A)){
     res_vec <- res_vec + A[i,]  
@@ -29,7 +61,9 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m){
     return(like)
   }
   
-  like <- likefunction(y)+1e-30 # compute likelihood
+  like <- likefunction(y) #compute likelihood
+  like[like<1e-30]=1e-30 #sometimes we get NaN when this number is 0 or really close to it.
+  #It happens rarely, most often when one of the points is really far from the distribution.
   deviance <- -2*sum(log(like)) # compute deviance
   
   res      <- matrix(NA,n_iter + 1, 2+3*k)
@@ -37,29 +71,33 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m){
   
   d_tot <- rep.row(rep(NA,length(y)),k)
   r_tot <- rep.row(rep(NA,length(y)),k)
+  
   for (iter in 1:n_iter) {
     
     # E step (get responsibilities)
     # responsibility = proportion times the Gaussian over the 2 found parameters
-    for (j in 1:k) {d_tot[j,] <- p[j]*dnorm(y, mu[j], sigma[j])+1e-30}
+    for (j in 1:k) {d_tot[j,] <- pmax(p[j]*dnorm(y, mu[j], sigma[j]),1e-30)}
     # getting optimal hidden state (since it is proportionality we need to normalize) distribution
-    for (j in 1:k) {r_tot[j,] <- d_tot[j,]/sum.row(d_tot)} 
+    for (j in 1:k) {r_tot[j,] <- d_tot[j,]/sum.columns(d_tot)} 
     
     # M step
-    # here we compute the pi, mean sigma for each responsibility
+    # here we compute the p, mean and sigma for each gaussian.
     for (j in 1:k){
       r = r_tot[j,]
       p[j]     <- mean(r)
       mu[j]    <- sum(r*y)/(sum(r))   
-      sigma[j] <-sqrt( sum(r*(y^2))/sum(r) - (mu[j])^2 ) +1.0e-8    
+      sigma[j] <- max(sqrt( sum(r*(y^2))/sum(r) - (mu[j])^2 ),1.0e-8)   #We don't want
+      #a value of sigma too small to avoid computational errors.
       if (is.nan(sigma[j])) {
         sigma[j]=0.05
-        print("NaN found in sigma[j]. Value reinitialized to 0.05")
+        print("NaN found in sigma[j]. Value reinitialized to 0.05") 
+        #Sometimes the sqrt in sigma[j] returns NaN. We decided to reinitialize that sigma
+        #value to 0.05 and hope it doesn't give NaN the second time.
       }
       }
     
     # -2 x log-likelihood (a.k.a. deviance)
-    like <- likefunction(y)+1e-30    # update likelihood 
+    like <- pmax(likefunction(y),1e-30)    # update likelihood 
     deviance <- -2*sum( log(like) )# update deviance
     
     # Save
@@ -71,16 +109,6 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m){
            col = "pink", border = "white",
            main = paste("Bart Simpson Density, M=",m), xlab = paste("EM Iteration: ", iter, "/", n_iter, sep = ""))
 
-      points(jitter(y), rep(0,length(y)), 
-             pch = 19, cex = .6 )
-      
-     #likefunction <- function(y){
-     #  like <- 0
-     #  for (i in 1:k){
-     #    like <- like + p[i]*dnorm(y, mu[i], sigma[i])
-     #  }
-     #  return(like)
-     #}
       
      # add curves, colors and legend
       cols = rep(NA,k+1) 
@@ -105,11 +133,9 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m){
              col=cols, lty=1, cex=0.6)
       grid()
       
-      #Sys.sleep(1.5)
     }
   }
   res <- data.frame(res)
-  #names(res) <- c("iteration","p1","p2","mu1","mu2","sigma1","sigma2","deviance")
   out <- list(parameters = c(p = p, mu = mu, sigma = sigma),
               deviance = deviance, 
               res = res)
@@ -117,32 +143,12 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m){
 }
 
 
-#n <- 3000 # Sample size
-##K=6 # number of ditributions
-#XX <- rnormmix(n,
-#               lambda = c(0.5, rep(0.1,5)),
-#               mu = c(0, ((0:4)/2)-1),
-#               sigma = c(1, rep(0.1,5)) )
-#
-#hist(XX, prob = T, col = "pink",
-#     border = "white", breaks = 100, 
-#     main = "Bart Simpson", 
-#     xlab = "")
-#
-#hem_fit <- handmade.em(XX, 
-#                       p      = rep(1/K,K), 
-#                       mu     = c(.4,.1,-.8,-.2,.8,.1),
-#                       sigma  = c(.1,.1,.4,.1,.6,.8), 
-#                       n_iter = 150,
-#                       plot_flag = T,
-#                       k=K)
-#round( hem_fit$parameters, 3 )
-#hem_fit$deviance
-
 
 # AIC ---------------------------------------------------------------------
 
-
+#This function takes in input a dataset and the results of the hem_fit function and gives
+#the log_likelihood associated to the MoG with the parameters learned by the EM algorithm 
+#on the given data.
 likefunction <- function(y, hem_fit){
   n_gauss = length(hem_fit$parameters)/3
   p = hem_fit$parameters[1:n_gauss]
@@ -155,44 +161,33 @@ likefunction <- function(y, hem_fit){
   return(log(like))
 }
 
-#ll <- likefunction(XX, hem_fit)
 
-M <- 10
-k_max <- 10
+
 AIC_results=rep(0,k_max)
 AIC_model= rep(0,k_max)
 BIC_results=rep(0,k_max)
 BIC_model= rep(0,k_max)
 
 
-gen_distr <- function(n, M){
-  distr = list()
-  for (j in 1:M) distr[[j]] = rnormmix(n, lambda = c(0.5, rep(0.1,5)),
-                                        mu = c(0, ((0:4)/2)-1), sigma = c(1, rep(0.1,5)) )
-  return(distr)
-}
 
-small_n = gen_distr(300,10)
-big_n = gen_distr(3000,10)
-
-data=big_n
-
-init_num = 5
-
-
-set.seed(1235)
 
 AIC_BIC <-function(Dataset){
-  for (j in 1:M){
+  for (j in 1:length(Dataset)){ #This cycle iterates over all samples 
     XX <- Dataset[[j]]
     n <- length(XX) 
-    for (i in 1:k_max){
+    
+    for (i in 1:k_max){ #This is the cycle that tries different number of gaussians
       
-      ll_sum <- -Inf
+      
+      #We now do a for loop to find the best initialization data for a particular
+      #fixed k (number of gaussians) and for a fixed dataset XX.
+      
+      
+      ll_sum <- -Inf  #This is a default initialization value. Every likelihood will be better
+      #than this.
       
       for (w in 1:init_num){
-        #a=runif(i,min=1,max=10)
-        #a=a/sum(a)
+        
         hem_fit_temp <- handmade.em(XX, 
                                p      = rep(1/i,i), 
                                mu     = runif(i,min=-1.5,max=1.5),
@@ -201,20 +196,24 @@ AIC_BIC <-function(Dataset){
                                plot_flag = T,
                                k=i,
                                m=j)
-        ll_temp<- likefunction(XX, hem_fit_temp) # compute log-likelihood
-        if (sum(ll_temp) > ll_sum) {
-          ll <- ll_temp
-          ll_sum <- sum(ll)
-          hem_fit <- hem_fit_temp
+        
+        ll_temp<- likefunction(XX, hem_fit_temp) # compute log-likelihood on XX.
+        
+        if (sum(ll_temp) > ll_sum) { # if the new ll is better than the best we had before
+          ll <- ll_temp    # save new ll in the ll variable
+          ll_sum <- sum(ll) # also compute the sum for the next iteration
+          hem_fit <- hem_fit_temp # and save all the values returned by the EM algorithm.
         }
         
       }
-      n_par=length(hem_fit$parameters)-1
+      n_par=length(hem_fit$parameters)-1 # if one knows n-1 values for p, the last one is forced
+      #to be 1-(sum(p_i)). This means that there's one less degree of freedom in the possible
+      #values of p.
       AIC <- round(-2*sum(ll)+2*n_par,2) # compute AIC
       BIC <- round(-2*sum(ll) + log(n)*n_par,2) # compute BIC
       
-      AIC_results[length(hem_fit$parameters)/3]=AIC #AIC_results[length(hem_fit$parameters)/3]+AIC # compute cumulative AIC over all models
-      BIC_results[length(hem_fit$parameters)/3]=BIC #BIC_results[length(hem_fit$parameters)/3]+BIC # compute cumulative BIC over all models
+      AIC_results[length(hem_fit$parameters)/3]=AIC 
+      BIC_results[length(hem_fit$parameters)/3]=BIC 
       
     }
     print(AIC_results)
@@ -225,9 +224,14 @@ AIC_BIC <-function(Dataset){
     BIC_model[j] = which.min(BIC_results) # store best model based on BIC
     print(paste('AIC:',which.min(AIC_results), '& BIC:', which.min(BIC_results)))
   }
+  
+  out <- list(AIC = deviance, 
+              BIC = res)
+  
+  return (out)
 }
 
-AIC_BIC(small_n)
+AIC_BIC(data)
 
 
 # Sample splitting ---------------------------------------------------------
@@ -235,10 +239,10 @@ AIC_BIC(small_n)
 library(caret)
 #sample splitting with p=0.5
 
-sample_splitting <-function(train_size,small_or_big_set) {
-  for (j in 1:M)
+sample_splitting <-function(train_size,Dataset) {
+  for (j in 1:length(Dataset))
     {
-    dataset=small_or_big_set[[j]]
+    dataset=Dataset[[j]]
     trainIndex<-createDataPartition(dataset, p = train_size, 
                         list = FALSE, 
                         times = 1)
@@ -289,7 +293,7 @@ sample_splitting <-function(train_size,small_or_big_set) {
 
 }
 
-sample_splitting(0.50,big_n)
+sample_splitting(0.50,data)
 
 # Cross-Validaton ---------------------------------------------------------
   
@@ -322,15 +326,11 @@ cv <- function(x, k_fold){
   return(folds)
 }
 
-k_cv = cv(small_n[[1]], 9)
-#k_cv
-for (i in 1:length(k_cv)) print(length(k_cv[[i]]))
 
-init_num=5
-cross_validation<-function(small_or_big_set,k_folds){
-  for (j in 1:M)
+cross_validation<-function(Dataset,k_folds){
+  for (j in 1:length(Dataset))
   {
-    dataset=small_or_big_set[[j]]
+    dataset=Dataset[[j]]
     k_cv=cv(dataset, k_folds)
     
     best_k=-1
@@ -405,22 +405,23 @@ cross_validation<-function(small_or_big_set,k_folds){
 }
 
 
-cross_validation(small_n,5)
+cross_validation(data,5)
 
 
 # Wasserstein-based estimation ----------------------------------------------------
 
+library("KScorrect")
+
 my_quantile <-function(X,z)  quantile(X,prob=z,names=FALSE)
 
 
-Wasserstein_score <-function(small_or_big_set) {
+Wasserstein_score <-function(Dataset) {
   
-  for (j in 1:M)
+  for (j in 1:length(Dataset))
   
   {
-    #dataset=small_or_big_set[[j]]
     
-    dataset=small_or_big_set[[j]]
+    dataset=Dataset[[j]]
     trainIndex<-createDataPartition(dataset, p = 0.5, 
                                     list = FALSE, 
                                     times = 1)
@@ -477,7 +478,7 @@ Wasserstein_score <-function(small_or_big_set) {
   
 }
 
-Wasserstein_score(big_n)
+Wasserstein_score(data)
 
 
 
