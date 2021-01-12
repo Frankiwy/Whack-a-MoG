@@ -1,4 +1,8 @@
 suppressMessages(require(mixtools, quietly = T))
+suppressMessages(require(KScorrect, quietly = T))
+
+library(caret)
+library("KScorrect")
 
 gen_distr <- function(n, M){
   distr = list()
@@ -18,19 +22,32 @@ init_num=1 #Every function that calls the EM algorithm tries to initialiaze mult
 #on the training sample (which for AIC and BIC coincides with the test sample).
 #Set this to 1 for a (much) faster run of the code.
 
-n_small=3 #number of small samples from the Bart.
-n_large=1 #number of large samples from the Bart.
+n_small=2 #number of small samples from the Bart.
+n_large=2 #number of large samples from the Bart.
 
-k_max=5 #The number of gaussians used for the MoG will be from 1 to k_max.
+k_max=8 #The number of gaussians used for the MoG will be from 1 to k_max.
 
 small_n = gen_distr(100,n_small) #One can choose how many points will be in every small sample
-large_n = gen_distr(2000,n_large) #One can choose how many points will be in every large sample
+large_n = gen_distr(1000,n_large) #One can choose how many points will be in every large sample
 
 
 
 
 
 #Useful functions and other operations------------------------------------
+
+podium <- function(vec,size=3){
+  copied_vec = vec # make copy
+  result <- rep(NA,size) # initialize vec in memory
+  for (i in 1:size){#iterate until the podium is full filled
+    idx = which.min(copied_vec) # get the smallest
+    result[i] = which.min(copied_vec)  # add it to the vec
+    copied_vec[idx] = Inf # substitute it with Inf
+  }
+  return(result)
+}
+
+
 
 data=c(small_n,large_n) #We concatenate the lists of datasets
 
@@ -50,7 +67,7 @@ sum.columns <- function(A){
 
 
 
-handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = T, k, m){
+handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = F, k, m){
   
   #function to compute the likelihood function
   likefunction <- function(y){
@@ -163,15 +180,18 @@ likefunction <- function(y, hem_fit){
 
 
 
-AIC_results=rep(0,k_max)
-AIC_model= rep(0,k_max)
-BIC_results=rep(0,k_max)
-BIC_model= rep(0,k_max)
 
 
 
 
-AIC_BIC <-function(Dataset){
+AIC_BIC <-function(Dataset,n_iter=500){
+  AIC_models=list()
+  BIC_models=list()
+  
+  AIC_results=rep(0,k_max)
+  BIC_results=rep(0,k_max)
+
+  
   for (j in 1:length(Dataset)){ #This cycle iterates over all samples 
     XX <- Dataset[[j]]
     n <- length(XX) 
@@ -182,7 +202,6 @@ AIC_BIC <-function(Dataset){
       #We now do a for loop to find the best initialization data for a particular
       #fixed k (number of gaussians) and for a fixed dataset XX.
       
-      
       ll_sum <- -Inf  #This is a default initialization value. Every likelihood will be better
       #than this.
       
@@ -192,8 +211,8 @@ AIC_BIC <-function(Dataset){
                                p      = rep(1/i,i), 
                                mu     = runif(i,min=-1.5,max=1.5),
                                sigma  = runif(i,min=0.1,max=0.4), 
-                               n_iter = 500,
-                               plot_flag = T,
+                               n_iter = n_iter,
+                               plot_flag = F,
                                k=i,
                                m=j)
         
@@ -216,30 +235,35 @@ AIC_BIC <-function(Dataset){
       BIC_results[length(hem_fit$parameters)/3]=BIC 
       
     }
-    print(AIC_results)
-    print(BIC_results)
+    #print(AIC_results)
+    #print(BIC_results)
+    
+    AIC_models[[j]] <- podium(AIC_results)
+    BIC_models[[j]] <- podium(BIC_results)
+    
     
     remove(XX)
-    AIC_model[j] = which.min(AIC_results) # store best model based on AIC
-    BIC_model[j] = which.min(BIC_results) # store best model based on BIC
-    print(paste('AIC:',which.min(AIC_results), '& BIC:', which.min(BIC_results)))
+
   }
   
-  out <- list(AIC = deviance, 
-              BIC = res)
+  out <- list(AIC = AIC_models, 
+              BIC = BIC_models)
   
   return (out)
 }
 
-AIC_BIC(data)
+temp_result=AIC_BIC(data,n_iter=50)
 
+AIC_result=temp_result$AIC
+BIC_result=temp_result$BIC
 
 # Sample splitting ---------------------------------------------------------
 
-library(caret)
+
 #sample splitting with p=0.5
 
-sample_splitting <-function(train_size,Dataset) {
+sample_splitting <-function(train_size,Dataset,n_iter=500) {
+  models=list()
   for (j in 1:length(Dataset))
     {
     dataset=Dataset[[j]]
@@ -248,8 +272,11 @@ sample_splitting <-function(train_size,Dataset) {
                         times = 1)
     train <- dataset[trainIndex]
     test <- dataset[-trainIndex]
-    best_k=-1
-    best_ll=-Inf
+    
+    
+    
+    results=rep(0,k_max)
+    
     
     for (i in 1:k_max){
       
@@ -264,8 +291,8 @@ sample_splitting <-function(train_size,Dataset) {
                                     p      = rep(1/i,i), 
                                     mu     = runif(i,min=-1.5,max=1.5),
                                     sigma  = runif(i,min=0.1,max=0.4), 
-                                    n_iter = 500,
-                                    plot_flag = T,
+                                    n_iter = n_iter,
+                                    plot_flag = F,
                                     k=i,
                                     m=j)
         ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with TRAIN
@@ -279,21 +306,21 @@ sample_splitting <-function(train_size,Dataset) {
       }
       #Now ll corresponds to the log-likelihood of the test dataset with the inizialization 
       #data that had the best results on the train set
-      if (sum(ll) > best_ll) 
-      {
-        best_ll <- sum(ll)
-        best_k <- i
-      }
-      
-      
+      results[length(hem_fit$parameters)/3]= -sum(ll)
+
     }
-    print(best_k)
+    
+    models[[j]] <- podium(results)
+   
     
   }
-
+  return (models)
 }
 
-sample_splitting(0.50,data)
+
+Sample_splitting30_result=sample_splitting(0.30,data,n_iter=50) 
+Sample_splitting50_result=sample_splitting(0.50,data,n_iter=50)
+Sample_splitting70_result=sample_splitting(0.70,data,n_iter=50)
 
 # Cross-Validaton ---------------------------------------------------------
   
@@ -327,22 +354,19 @@ cv <- function(x, k_fold){
 }
 
 
-cross_validation<-function(Dataset,k_folds){
+cross_validation<-function(Dataset,k_folds,n_iter){
+  models=list()
   for (j in 1:length(Dataset))
   {
     dataset=Dataset[[j]]
     k_cv=cv(dataset, k_folds)
     
-    best_k=-1
-    best_ll=-Inf
-    
+    results=rep(0,k_max)
+    #results[length(hem_fit$parameters)/3]= -sum(ll)
     
     for (i in 1:k_max)
     { 
       
-      
-      
-      ll_sum <- -Inf
       
       k_cv_results=rep(NA,k_folds)
       
@@ -363,8 +387,8 @@ cross_validation<-function(Dataset,k_folds){
                                       p      = rep(1/i,i), 
                                       mu     = runif(i,min=-1.5,max=1.5),
                                       sigma  = runif(i,min=0.1,max=0.4), 
-                                      n_iter = 300,
-                                      plot_flag = T,
+                                      n_iter = n_iter,
+                                      plot_flag = F,
                                       k=i,
                                       m=j)
           ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with TRAIN
@@ -383,43 +407,38 @@ cross_validation<-function(Dataset,k_folds){
         
         
       }
-      print(k_cv_results)
+      #print(k_cv_results)
       ll_mean=mean(k_cv_results)
-      print(ll_mean)
-      print(" ")
+      results[length(hem_fit$parameters)/3]= -ll_mean
+      #print(ll_mean)
+      #print(" ")
       
       
       
       
-      if (ll_mean > best_ll) 
-      {
-        best_ll <- ll_mean
-        best_k <- i
-        
-      }
+      
       
     }
-    print(best_k)  
+    models[[j]] <- podium(results)
       
   }
+  return (models)
 }
 
 
-cross_validation(data,5)
+Cross_validation5_results=cross_validation(data,5,n_iter=50)
+Cross_validation10_results=cross_validation(data,10,n_iter=50)
 
 
 # Wasserstein-based estimation ----------------------------------------------------
 
-library("KScorrect")
 
-my_quantile <-function(X,z)  quantile(X,prob=z,names=FALSE)
-
-
-Wasserstein_score <-function(Dataset) {
-  
+Wasserstein_score <-function(Dataset,n_iter=500) {
+  models=list()
   for (j in 1:length(Dataset))
   
   {
+    results=rep(0,k_max)
     
     dataset=Dataset[[j]]
     trainIndex<-createDataPartition(dataset, p = 0.5, 
@@ -428,7 +447,7 @@ Wasserstein_score <-function(Dataset) {
     train <- dataset[trainIndex]
     test <- dataset[-trainIndex]
     
-    Quantile_to_integrate_te <-function(z) my_quantile(dataset,z)
+    Quantile_to_integrate_te <-function(z) quantile(dataset,prob=z,names=FALSE)
     
     for (i in 1:k_max){
       
@@ -440,8 +459,8 @@ Wasserstein_score <-function(Dataset) {
                                     p      = rep(1/i,i), 
                                     mu     = runif(i,min=-1.5,max=1.5),
                                     sigma  = runif(i,min=0.1,max=0.4), 
-                                    n_iter = 500,
-                                    plot_flag = T,
+                                    n_iter = n_iter,
+                                    plot_flag = F,
                                     k=i,
                                     m=j)
         ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with TRAIN
@@ -469,34 +488,17 @@ Wasserstein_score <-function(Dataset) {
       print(i)
       print(W_k$value)
       print(" ")
+      
+      results[length(hem_fit$parameters)/3]=W_k$value
     }
-  
     
- 
+    models[[j]] <- podium(results)
+    
   }
-  
+  return (models)
   
 }
 
-Wasserstein_score(data)
-
-
-######## PODIUM ##########
-
-x <- c(1,2,4,5,6,7,8,12,1,34,2,5,3)
-
-podium <- function(vec,size){
-  copied_vec = vec # make copy
-  result <- rep(NA,size) # initialize vec in memory
-  for (i in 1:size){#iterate until the podium is full filled
-    idx = which.min(copied_vec) # get the smallest
-    result[i] = which.min(copied_vec)  # add it to the vec
-    copied_vec[idx] = Inf # substitute it with Inf
-  }
-  return(result)
-}
-
-res = podium(x,5)
-res
+Wasserstein_score_results=Wasserstein_score(data,n_iter=50)
 
 
