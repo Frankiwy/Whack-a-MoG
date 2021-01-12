@@ -254,8 +254,8 @@ AIC_BIC <-function(Dataset,n_iter=500){
 
 temp_result=AIC_BIC(data,n_iter=50)
 
-AIC_result=temp_result$AIC
-BIC_result=temp_result$BIC
+AIC_results=temp_result$AIC
+BIC_results=temp_result$BIC
 
 # Sample splitting ---------------------------------------------------------
 
@@ -318,9 +318,9 @@ sample_splitting <-function(train_size,Dataset,n_iter=500) {
 }
 
 
-Sample_splitting30_result=sample_splitting(0.30,data,n_iter=50) 
-Sample_splitting50_result=sample_splitting(0.50,data,n_iter=50)
-Sample_splitting70_result=sample_splitting(0.70,data,n_iter=50)
+Sample_splitting30_results=sample_splitting(0.30,data,n_iter=50) 
+Sample_splitting50_results=sample_splitting(0.50,data,n_iter=50)
+Sample_splitting70_results=sample_splitting(0.70,data,n_iter=50)
 
 # Cross-Validaton ---------------------------------------------------------
   
@@ -485,10 +485,6 @@ Wasserstein_score <-function(Dataset,n_iter=500) {
       function_to_integrate <-function(z) abs(Quantile_to_integrate_te(z)-Quantile_to_integrate_k(z))
       W_k=integrate(function_to_integrate,lower=0,upper=1,subdivisions = 10000)
       
-      print(i)
-      print(W_k$value)
-      print(" ")
-      
       results[length(hem_fit$parameters)/3]=W_k$value
     }
     
@@ -501,4 +497,14 @@ Wasserstein_score <-function(Dataset,n_iter=500) {
 
 Wasserstein_score_results=Wasserstein_score(data,n_iter=50)
 
+listHolder=list(AIC=AIC_results,
+                BIC=BIC_results,
+                Sample_splitting30=Sample_splitting30_results,
+                Sample_splitting50=Sample_splitting50_results,
+                Sample_splitting70=Sample_splitting70_results,
+                Cross_validation5=Cross_validation5_results,
+                Cross_validation10=Cross_validation10_results,
+                Wesserstein_score=Wasserstein_score_results
+                )
 
+print("finished")
