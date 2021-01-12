@@ -481,4 +481,22 @@ Wasserstein_score <-function(Dataset) {
 Wasserstein_score(data)
 
 
+######## PODIUM ##########
+
+x <- c(1,2,4,5,6,7,8,12,1,34,2,5,3)
+
+podium <- function(vec,size){
+  copied_vec = vec # make copy
+  result <- rep(NA,size) # initialize vec in memory
+  for (i in 1:size){#iterate until the podium is full filled
+    idx = which.min(copied_vec) # get the smallest
+    result[i] = which.min(copied_vec)  # add it to the vec
+    copied_vec[idx] = Inf # substitute it with Inf
+  }
+  return(result)
+}
+
+res = podium(x,5)
+res
+
 
