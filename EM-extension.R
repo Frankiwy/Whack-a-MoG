@@ -15,7 +15,7 @@ gen_distr <- function(n, M){
 
 #Parameters in the code ------------------------------
 
-set.seed(1234)
+set.seed(42)
 
 init_num=10 #Every function that calls the EM algorithm tries to initialiaze multiple times 
 #(for a fixed number of gaussians) and keeps the parameters that gave the best results
