@@ -17,18 +17,18 @@ gen_distr <- function(n, M){
 
 set.seed(1234)
 
-init_num=1 #Every function that calls the EM algorithm tries to initialiaze multiple times 
+init_num=10 #Every function that calls the EM algorithm tries to initialiaze multiple times 
 #(for a fixed number of gaussians) and keeps the parameters that gave the best results
 #on the training sample (which for AIC and BIC coincides with the test sample).
 #Set this to 1 for a (much) faster run of the code.
 
-n_small=2 #number of small samples from the Bart.
-n_large=2 #number of large samples from the Bart.
+n_small=10 #number of small samples from the Bart.
+n_large=10 #number of large samples from the Bart.
 
-k_max=8 #The number of gaussians used for the MoG will be from 1 to k_max.
+k_max=12 #The number of gaussians used for the MoG will be from 1 to k_max.
 
-small_n = gen_distr(100,n_small) #One can choose how many points will be in every small sample
-large_n = gen_distr(1000,n_large) #One can choose how many points will be in every large sample
+small_n = gen_distr(250,n_small) #One can choose how many points will be in every small sample
+large_n = gen_distr(3000,n_large) #One can choose how many points will be in every large sample
 
 
 
@@ -252,7 +252,7 @@ AIC_BIC <-function(Dataset,n_iter=500){
   return (out)
 }
 
-temp_result=AIC_BIC(data,n_iter=50)
+temp_result=AIC_BIC(data,n_iter=100)
 
 AIC_results=temp_result$AIC
 BIC_results=temp_result$BIC
@@ -318,9 +318,9 @@ sample_splitting <-function(train_size,Dataset,n_iter=500) {
 }
 
 
-Sample_splitting30_results=sample_splitting(0.30,data,n_iter=50) 
-Sample_splitting50_results=sample_splitting(0.50,data,n_iter=50)
-Sample_splitting70_results=sample_splitting(0.70,data,n_iter=50)
+Sample_splitting30_results=sample_splitting(0.30,data,n_iter=100) 
+Sample_splitting50_results=sample_splitting(0.50,data,n_iter=100)
+Sample_splitting70_results=sample_splitting(0.70,data,n_iter=100)
 
 # Cross-Validaton ---------------------------------------------------------
   
@@ -426,8 +426,8 @@ cross_validation<-function(Dataset,k_folds,n_iter){
 }
 
 
-Cross_validation5_results=cross_validation(data,5,n_iter=50)
-Cross_validation10_results=cross_validation(data,10,n_iter=50)
+Cross_validation5_results=cross_validation(data,5,n_iter=100)
+Cross_validation10_results=cross_validation(data,10,n_iter=100)
 
 
 # Wasserstein-based estimation ----------------------------------------------------
@@ -495,7 +495,7 @@ Wasserstein_score <-function(Dataset,n_iter=500) {
   
 }
 
-Wasserstein_score_results=Wasserstein_score(data,n_iter=50)
+Wasserstein_score_results=Wasserstein_score(data,n_iter=100)
 
 listHolder=list(AIC=AIC_results,
                 BIC=BIC_results,
@@ -506,5 +506,7 @@ listHolder=list(AIC=AIC_results,
                 Cross_validation10=Cross_validation10_results,
                 Wesserstein_score=Wasserstein_score_results
                 )
-
+TO_SAVE= do.call(rbind, listHolder)
+write.csv2(TO_SAVE,'listHolder.csv')
 print("finished")
+
