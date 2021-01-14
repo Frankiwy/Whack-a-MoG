@@ -511,9 +511,7 @@ TO_SAVE= do.call(rbind, listHolder)
 write.csv2(TO_SAVE,'listHolder.csv')
 print("finished")
 
-<<<<<<< HEAD
-listHolder
-typeof(length(listHolder$AIC))
+
 ######################
 
 get_df <- function(elm_list){
@@ -551,5 +549,17 @@ plt_table <- function(df,name){
 m_names = c("AIC","BIC","SamS_30","SamS_50","SamS_70","CV_5","CV_10","Wesserstein")
 for (l in 1:length(listHolder)) print(plt_table(get_df(listHolder[[l]]),m_names[l]))
 
-=======
->>>>>>> refs/remotes/origin/main
+list_res = list()
+c=1
+for (d in listHolder[-1]){
+  mid_matrix = matrix(NA, nrow = 8, ncol = 4)
+  for (v in 1:length(d)){
+    get_value = eval(parse(text=d[v]))
+    get_value = append(get_value, m_names[v],after=0)
+    mid_matrix[v,] = get_value
+  }
+  df = as.data.frame(mid_matrix)
+  names(df) = c("method","1st","2nd","3rd")
+  list_res[[c]] = df
+  c = c+1
+}
