@@ -1,0 +1,215 @@
+---
+title: "Whack a MoG"
+author: "Verdini - Romeo"
+date: "15/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+<br><br>
+
+As first thing, here are reported the used external libraries to accomplish the task.  
+```{r include=TRUE, message=FALSE, eval=FALSE}
+suppressMessages(require(mixtools, quietly = T))
+suppressMessages(require(KScorrect, quietly = T))
+suppressMessages(require(caret, quietly = T))
+library(gt)
+```
+
+
+The gen_distr() is the function that will generate samples from a Bart distribution implemented using the rnormix() function implemented in R.  
+```{r include=TRUE, message=FALSE, eval=FALSE}
+gen_distr <- function(n, M){
+  distr = list()
+  for (j in 1:M) distr[[j]] = rnormmix(n, lambda = c(0.5, rep(0.1,5)),
+                                       mu = c(0, ((0:4)/2)-1), sigma = c(1, rep(0.1,5)) )
+  return(distr)
+}
+```
+
+
+Here below are reported the initialization parameters that the user can change in order to get different results. 
+```{r include=TRUE, message=FALSE, eval=FALSE}
+set.seed(42)
+
+init_num=8 #Every function that calls the EM algorithm tries to initialiaze multiple times 
+#(for a fixed number of gaussians) and keeps the parameters that gave the best results
+#on the training sample (which for AIC and BIC coincides with the test sample).
+#Set this to 1 for a (much) faster run of the code.
+
+n_small=10 #number of small samples from the Bart.
+n_large=10 #number of large samples from the Bart.
+
+k_max=12 #The number of gaussians used for the MoG will be from 1 to k_max.
+
+small_n = gen_distr(250,n_small) #One can choose how many points will be in every small sample
+large_n = gen_distr(5000,n_large) #One can choose how many points will be in every large sample
+
+data=c(small_n,large_n) #We concatenate the lists of datasets
+```
+
+The fallowing 2 functions will be used during the execution of the code.
+* podium = this function will be called at the end of every metric to return the top k values chosen by every metric on every sample.
+* rep.row = it's our function that repeat a vector n times, returning a matrix with n copies of the input vectors as rows. 
+* sum.columns = it's our implementation of colSums()- Given a matrix as input, it sums all the columns, returning an array where in position i will be sums of columns i.
+
+```{r include=TRUE, message=FALSE, eval=FALSE}
+podium <- function(vec,size=3){
+  copied_vec = vec # make copy
+  result <- rep(NA,size) # initialize vec in memory
+  for (i in 1:size){#iterate until the podium is full filled
+    idx = which.min(copied_vec) # get the smallest
+    result[i] = which.min(copied_vec)  # add it to the vec
+    copied_vec[idx] = Inf # substitute it with Inf
+  }
+  return(result)
+}
+
+
+rep.row<-function(x,n){
+  matrix(rep(x,each=n),nrow=n)
+} # the function is used to pre-allocate the matrix 
+
+# the function is used to return a vector where each entry is the sum of each element
+# in that column.
+sum.columns <- function(A){
+  res_vec <- rep(0, ncol(A))
+  for (i in 1:nrow(A)){
+    res_vec <- res_vec + A[i,]  
+  }
+  return(res_vec)
+} 
+
+```
+
+This is the adjusted handmade.em function that works with k Gaussians. We have decided to stick with the code ([Brutti's implementation](https://elearning.uniroma1.it/pluginfile.php/389598/course/section/166527/Topic%2013%20-%20Parametric%20Inference%20-%20MoG.R?time=1608629571077)) impleted by prof. Brutti,  with the fallowing changes:
+
+* k = is the input parameter that changes the number of Gaussians. 
+
+* m = is the input parameter used while plotting the functions to identify which on dataset the function is optimizing the parameters.
+
+* likefunction = it is a function that computes the likelihood on the whole given dataset.
+
+* d_tot, r_tot = correspond to r1, r2, d1 and d2 but, since we are dealing with more than two Gaussinas, they are matrices instead of numbers.
+
+Moreover, all the other parameters (p, mu, sigma) have been treated as matrices since there are more than two Gaussians.
+```{r include=TRUE, message=FALSE, eval=FALSE}
+
+handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = F, k, m){
+  
+  #function to compute the likelihood function
+  likefunction <- function(y){
+    like <- 0
+    for (i in 1:k){
+      like <- like + p[i]*dnorm(y, mu[i], sigma[i])
+    }
+    return(like)
+  }
+  
+  like <- likefunction(y) #compute likelihood
+  like[like<1e-30]=1e-30 #sometimes we get NaN when this number is 0 or really close to   it.
+  #It happens rarely, most often when one of the points is really far from the           distribution.
+  deviance <- -2*sum(log(like)) # compute deviance
+  
+  res      <- matrix(NA,n_iter + 1, 2+3*k)
+  res[1,]  <- c(0, p, mu, sigma, deviance)
+  
+  d_tot <- rep.row(rep(NA,length(y)),k)
+  r_tot <- rep.row(rep(NA,length(y)),k)
+  
+  for (iter in 1:n_iter) {
+    
+    # E step (get responsibilities)
+    # responsibility = proportion times the Gaussian over the 2 found parameters
+    for (j in 1:k) {d_tot[j,] <- pmax(p[j]*dnorm(y, mu[j], sigma[j]),1e-30)}
+    # getting optimal hidden state (since it is proportionality we need to normalize)      distribution
+    for (j in 1:k) {r_tot[j,] <- d_tot[j,]/sum.columns(d_tot)} 
+    
+    # M step
+    # here we compute the p, mean and sigma for each gaussian.
+    for (j in 1:k){
+      r = r_tot[j,]
+      p[j]     <- mean(r)
+      mu[j]    <- sum(r*y)/(sum(r))   
+      sigma[j] <- max(sqrt( sum(r*(y^2))/sum(r) - (mu[j])^2 ),1.0e-8)   #We don't want
+      #a value of sigma too small to avoid computational errors.
+      if (is.nan(sigma[j])) {
+        sigma[j]=0.05
+        print("NaN found in sigma[j]. Value reinitialized to 0.05") 
+        #Sometimes the sqrt in sigma[j] returns NaN. We decided to reinitialize that           sigma
+        #value to 0.05 and hope it doesn't give NaN the second time.
+      }
+      }
+    
+    # -2 x log-likelihood (a.k.a. deviance)
+    like <- pmax(likefunction(y),1e-30)    # update likelihood 
+    deviance <- -2*sum( log(like) )# update deviance
+    
+    # Save
+    res[iter+1,] <- c(iter, p, mu, sigma, deviance)
+    
+    # Plot
+    if (plot_flag && iter==n_iter){
+      hist(y, prob = T, breaks=100, 
+           col = "pink", border = "white",
+           main = paste("Bart Simpson Density, M=",m),
+           xlab = paste("EM Iteration: ", iter, "/", n_iter, sep = ""))
+
+      
+     # add curves, colors and legend
+      cols = rep(NA,k+1) 
+      cols[k+1] = "orange"
+      # #iterate to plot every distribution
+      for (i in 1:k) {
+        cols[i] = rgb(runif(1),runif(1),runif(1),.8)
+        curve(p[i]*dnorm(x,mu[i],sigma[i]),
+                            lwd = 3,
+                            lty = 5,
+                            col = cols[i],
+                            add = TRUE)}
+      # add the join distribution
+      curve(likefunction(x),
+            lwd = 4, col = "orange", add = TRUE)
+      # add the legend
+      legendlabels=rep(NA,k+1)
+      for (i in 1:k){legendlabels[i]=paste("Distribution ", i)}
+      legendlabels[k+1] = "joint "
+      
+      legend('topright',legend=legendlabels,
+             col=cols, lty=1, cex=0.6)
+      grid()
+      
+    }
+  }
+  res <- data.frame(res)
+  out <- list(parameters = c(p = p, mu = mu, sigma = sigma),
+              deviance = deviance, 
+              res = res)
+  return(out)
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
