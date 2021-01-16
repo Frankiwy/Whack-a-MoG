@@ -36,15 +36,15 @@ Here below are reported the initialization parameters that the user can change i
 ```{r include=TRUE, message=FALSE, eval=FALSE}
 set.seed(42)
 
-init_num=8 #Every function that calls the EM algorithm tries to initialiaze multiple times 
+init_num=8 #Every function that calls the EM algorithm tries to initialize multiple times 
 #(for a fixed number of gaussians) and keeps the parameters that gave the best results
 #on the training sample (which for AIC and BIC coincides with the test sample).
 #Set this to 1 for a (much) faster run of the code.
 
-n_small=10 #number of small samples from the Bart.
-n_large=10 #number of large samples from the Bart.
+n_small=10 # number of small samples from the Bart.
+n_large=10 # number of large samples from the Bart.
 
-k_max=12 #The number of gaussians used for the MoG will be from 1 to k_max.
+k_max=12 # The number of gaussians used for the MoG will be from 1 to k_max.
 
 small_n = gen_distr(250,n_small) #One can choose how many points will be in every small sample
 large_n = gen_distr(5000,n_large) #One can choose how many points will be in every large sample
@@ -104,7 +104,9 @@ likefunction <- function(y, hem_fit){
 
 ```
 
-This is the adjusted handmade.em function that works with k Gaussians. We have decided to stick with the code ([Brutti's implementation](https://elearning.uniroma1.it/pluginfile.php/389598/course/section/166527/Topic%2013%20-%20Parametric%20Inference%20-%20MoG.R?time=1608629571077)) impleted by prof. Brutti,  with the fallowing changes:
+### <span style="color: purple;"> 2) EM Function</span>
+
+This is the adjusted handmade.em function that works with k Gaussians. We have decided to stick with the code ([Brutti's implementation](https://elearning.uniroma1.it/pluginfile.php/389598/course/section/166527/Topic%2013%20-%20Parametric%20Inference%20-%20MoG.R?time=1608629571077)) implemented by prof. Brutti,  with the fallowing changes:
 
 * k = is the input parameter that changes the number of Gaussians. 
 
@@ -116,6 +118,11 @@ This is the adjusted handmade.em function that works with k Gaussians. We have d
 
 Moreover, all the other parameters (p, mu, sigma) have been treated as matrices since there are more than two Gaussians. 
 Note: We left the calculation of the likelihood and the deviance in the handmade.em() function even though we don't use them. They could be removed to speed up the computation.  
+
+We have considered to implement an early stopping condition by looking how the deviance changes throughout the iterations of the algorithm, but at the end we decided to simply use 200 iterations  because sometimes the speed of convergence is slow and after more iterations it is possible to observe a significant improvement. Look at Appendix A for an example of this.
+
+
+
 ```{r include=TRUE, message=FALSE, eval=FALSE}
 
 handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = F, k, m){
@@ -212,9 +219,9 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = F, k, m){
 }
 ```
 
-### <span style="color: purple;">2) Multiple Iinitialization</span>
+### <span style="color: purple;">3) Multiple Initialization</span>
 
-Since the MIxture of gaussians EM is very sensitive to the intialization parameters, there are multiple solutions that can be considered like:
+Since the Mixture of Gaussians EM is very sensitive to the initialization parameters, there are multiple solutions that can be considered like:
 
 * trying multiple initialization and keeping only the one that returns best results after the fit. 
 
@@ -224,12 +231,11 @@ AND/OR
 
 We have decided to follow the easiest way and not using additional information about the data. i.e. we initialize with simple uniform distribution for the parameters ($\mu$, $\sigma$) and we do that multiple times and keeping as results only the one that return a better results in terms of fitting. Instead, regarding the p parameter, we didn't randomize its initialization but we assigned 1/k, where k is the number of Gaussians.
 
-IMMAGINI
+To understand why a good initialization is important, in Appendix B, we show 5 different results of the handmade.em() function, with different (random) initialization parameters. Notice how the one with the highest mean log-likelihood is the one that also better fits the data visually. It is important to highlight that the choice of initialization parameters is done on training set and not on the test. 
 
+### <span style="color: purple;"> 4) AIC & BIC</span>
 
-
-### <span style="color: purple;">3) AIC & BIC</span>
-
+The AIC_BIC() function represented below is the function used to score every MoG with the two metrics AIC and BIC. The function, after having optimized the parameter by calling the handmade.em() function, computes the AIC and BIC scores and keeps, by calling the podium(), the best three results according to the AIC and BIC metrics.
 
 ```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
 
@@ -246,7 +252,6 @@ AIC_BIC <-function(Dataset,n_iter=500){
     n <- length(XX) 
     
     for (i in 1:k_max){ #This is the cycle that tries different number of gaussians
-      
       
       #We now do a for loop to find the best initialization data for a particular
       #fixed k (number of gaussians) and for a fixed dataset XX.
@@ -266,15 +271,15 @@ AIC_BIC <-function(Dataset,n_iter=500){
         
         ll_temp<- likefunction(XX, hem_fit_temp) # compute log-likelihood on XX.
         
-        if (sum(ll_temp) > ll_sum) { # if the new ll is better than the best we had before
+        if (sum(ll_temp) > ll_sum) { # if the new ll is better than the best we had              before
           ll <- ll_temp    # save new ll in the ll variable
           ll_sum <- sum(ll) # also compute the sum for the next iteration
-          hem_fit <- hem_fit_temp # and save all the values returned by the EM algorithm.
+          hem_fit <- hem_fit_temp # and save all the values returned by the EM                   algorithm.
         }
         
       }
-      n_par=length(hem_fit$parameters)-1 # if one knows n-1 values for p, the last one is forced
-      #to be 1-(sum(p_i)). This means that there's one less degree of freedom in the possible
+      n_par=length(hem_fit$parameters)-1 # if one knows n-1 values for p, the last one       is forced
+      #to be 1-(sum(p_i)). This means that there's one less degree of freedom in the         possible
       #values of p.
       AIC <- round(-2*sum(ll)+2*n_par,2) # compute AIC
       BIC <- round(-2*sum(ll) + log(n)*n_par,2) # compute BIC
@@ -283,29 +288,86 @@ AIC_BIC <-function(Dataset,n_iter=500){
       BIC_results[length(hem_fit$parameters)/3]=BIC 
       
     }
-    #print(AIC_results)
-    #print(BIC_results)
-    
     AIC_models[[j]] <- podium(AIC_results)
     BIC_models[[j]] <- podium(BIC_results)
-    
-    
     remove(XX)
-
   }
   
   out <- list(AIC = AIC_models, 
               BIC = BIC_models)
-  
   return (out)
 }
+```
 
-temp_result=AIC_BIC(data,n_iter=100)
+The AIC_results, BIC_results are two lists that store the AIC and BIC results.
+
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+temp_result=AIC_BIC(data,n_iter=200)
 
 AIC_results=temp_result$AIC
 BIC_results=temp_result$BIC
+```
 
 
+### <span style="color: purple;"> 5) Sample Splitting </span>
+
+The sample_splitting() function takes in input the train_size (30%, 50% or 70% in our cases), all the data on which it has to work, and the number of iterations. Once it has returned the optimized parameters on the training sample by calling the handmade.em() function, it computes the log-likelihood on the test and returns, by calling the podium(), the best three results according to the test log-likelihood.
+
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+sample_splitting <-function(train_size,Dataset,n_iter=500) {
+  models=list()
+  for (j in 1:length(Dataset))
+    {
+    dataset=Dataset[[j]]
+    trainIndex<-createDataPartition(dataset, p = train_size, 
+                        list = FALSE, 
+                        times = 1)
+    train <- dataset[trainIndex]
+    test <- dataset[-trainIndex]
+    
+    results=rep(0,k_max)
+    
+    for (i in 1:k_max){
+      
+      ll_sum <- -Inf
+      
+      #THIS CYCLE KEEPS K FIXED AND IS HERE TO SELECT BETTER INITIALIZATION PARAMETERS       FOR A FIXED K
+      for (w in 1:init_num)
+        {
+        hem_fit_temp <- handmade.em(train, 
+                                    p      = rep(1/i,i), 
+                                    mu     = runif(i,min=-1.5,max=1.5),
+                                    sigma  = runif(i,min=0.1,max=0.4), 
+                                    n_iter = n_iter,
+                                    plot_flag = F,
+                                    k=i,
+                                    m=j)
+        ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with             TRAIN
+        ll_test<- likefunction(test, hem_fit_temp) # compute log-likelihood with TEST
+        if (sum(ll_train) > ll_sum) 
+          {
+            ll <- ll_test
+            ll_sum <- sum(ll_train)
+            hem_fit <- hem_fit_temp
+          }
+      }
+      #Now ll corresponds to the log-likelihood of the test dataset with the                 initialization data that had the best results on the train set
+      results[length(hem_fit$parameters)/3]= -sum(ll)
+
+    }
+    
+    models[[j]] <- podium(results)
+   
+  }
+  return (models)
+}
+```
+
+Below are reported three lists containing the top 3 MoGs for each sample data.
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+Sample_splitting30_results=sample_splitting(0.30,data,n_iter=100) 
+Sample_splitting50_results=sample_splitting(0.50,data,n_iter=100)
+Sample_splitting70_results=sample_splitting(0.70,data,n_iter=100)
 ```
 
 
@@ -321,6 +383,27 @@ BIC_results=temp_result$BIC
 
 
 
+
+
+
+
+APPENDIX A:
+
+The graph on the left shows the whole optimization by looking at the deviance, whereas the graph on the right is the same but without the first iteration. This allows us to show the phenomenon we mentioned in Section 2.
+```{r, echo=FALSE,out.width="49%",  out.height="20%",fig.cap="Deviance",fig.show='hold',fig.align='center'}
+knitr::include_graphics(c("images/deviance01.png" ,"images/deviance02.png"))
+``` 
+
+
+
+
+APPENDIX B:
+
+
+```{r, echo=FALSE,out.width="49%",  out.height="20%",fig.cap="Fit examples",fig.show='hold',fig.align='center'}
+knitr::include_graphics(c("images/Rplot01.png" ,"images/Rplot02.png", "images/Rplot03.png", "images/Rplot04.png", "images/Rplot.png"))
+
+``` 
 
 
 
