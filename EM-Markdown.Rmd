@@ -567,9 +567,13 @@ Wasserstein_score_results=Wasserstein_score(data,n_iter=100)
 
 
 
+We now comment the result we got. A full table is in APPENDIX C.
 
+* The k value chosen by the AIC is always higher than the one chosen from the BIC for the small sample size. This is expected since the penalization that the BIC gives to the number of parameters used is higher and the fit for small datasets is not very good. The effect is still there for the large sample size, but it's less visible and the number of chosen gaussians is often the same.
 
+* The "true" value for k: 6 is almost never in the top 3. With our method of initialization, it's really hard for the model to actually find good parameters and even when it does it's not necessarily better (according to the log-likelihood metric) than a model with more gaussians. The number 7 is chosen a lot, especially for the large samples, though: the optimization leads to two gaussians with large sigma and small p and 5 different gaussians with small sigmas centered at the peaks.
 
+* The models chosen by the sample splitting and cross validation method (especially) usually go for high number of gaussians. We were at first confused by this, but it's to be expected since one is only using the log-likelihood as a metric and it doesn't penalize the number of parameters used in the model. These models with more than 6 gaussians are not overfitting (in the sense of "not being predictive on unseen data") and a lot of the extra gaussians in the trained model have small p values or happen to be very close (the algorithm is using the fact that math{e^{-x^2}=\frac{1}{2}e^{-x^2}+\frac{1}{2}e^{-x^2}}) 
 
 
 
