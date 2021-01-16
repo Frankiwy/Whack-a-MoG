@@ -235,7 +235,7 @@ To understand why a good initialization is important, in Appendix B, we show 5 d
 
 ### <span style="color: purple;"> 4) AIC & BIC</span>
 
-The AIC_BIC() function represented below is the function used to score every MoG with the two metrics AIC and BIC. The function, after having optimized the parameter by calling the handmade.em() function, computes the AIC and BIC scores and keeps, by calling the podium(), the best three results according to the AIC and BIC metrics.
+The AIC_BIC() function represented below is the function used to score every MoG with the two metrics AIC and BIC. The function, after having optimized the parameter by calling the handmade.em() function, computes the AIC and BIC scores. It keeps, by calling the podium(), the top three k values (representing the number of gaussian forming each MoG) according to the AIC and BIC metrics.
 
 ```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
 
@@ -311,7 +311,7 @@ BIC_results=temp_result$BIC
 
 ### <span style="color: purple;"> 5) Sample Splitting </span>
 
-The sample_splitting() function takes in input the train_size (30%, 50% or 70% in our cases), all the data on which it has to work, and the number of iterations. Once it has returned the optimized parameters on the training sample by calling the handmade.em() function, it computes the log-likelihood on the test and returns, by calling the podium(), the best three results according to the test log-likelihood.
+The sample_splitting() function takes in input the train_size (30%, 50% or 70% in our cases), all the data on which it has to work, and the number of iterations. Once it has returned the optimized parameters on the training sample by calling the handmade.em() function, it computes the log-likelihood on the train, and if it was better than the one computed in the previous iteration, it also computes the log-likelihood on the test. At the end it returns, by calling the podium(), the top three k values (representing the number of gaussian forming each MoG) according to log-likelihood computed on the test set.
 
 ```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
 #The structure of the code here is similar to the on in the AIC_BIC() function above.
@@ -369,7 +369,7 @@ sample_splitting <-function(train_size,Dataset,n_iter=500) {
 }
 ```
 
-Below are reported three lists containing the top 3 MoGs for each sample data.
+Below are reported three lists containing the results for different train-test ratios.
 ```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
 Sample_splitting30_results=sample_splitting(0.30,data,n_iter=100) 
 Sample_splitting50_results=sample_splitting(0.50,data,n_iter=100)
@@ -377,11 +377,192 @@ Sample_splitting70_results=sample_splitting(0.70,data,n_iter=100)
 ```
 
 
+### <span style="color: purple;"> 6) Cross Validation </span>
+
+The cv() function, is our implementation of CV-sample splitting. It keeps in input:
+* x = a dataset.
+
+* k_fold = the number of folds on which we want to our dataset to split into.
+It retuns a list with the desired number of folds.
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+cv <- function(x, k_fold){
+  dataset <- x # copy the data set
+  l = length(dataset) # get its length
+  folds <- list() # list will contain all folds
+  size <- as.integer(l/k_fold) # size of each fold
+  for (n in 1:k_fold){ # iterate over all the desired folders
+    fold_elements = c() # vector that will store elements
+    while (length(fold_elements) < size){ # iterate until the fold size is reached
+      idx_elm = sample(1:l, 1) # get index element
+      fold_elements = c(fold_elements, dataset[idx_elm]) # add element to the vector
+      dataset = dataset[-idx_elm] # drop element from data set
+      l = length(dataset) # recompute the length
+    }
+    folds[[n]] = fold_elements  # add vector(representing the folder) to the folder list
+  }
+  if (l != 0){# if there are still data points
+    for (m in 1:l){ #assign them one by one to the folders until are done
+      folds[[m]] = c(folds[[m]], dataset[1]) # assign a data point to folder m
+      dataset = dataset[-1] # delete it from the data set
+    }
+  }
+  return(folds)
+}
+
+```
+
+
+The cross_validation() function takes in input:
+* Dataset = a dataset
+
+* k_folds = the number of folds on which we want to our dataset to split into. This parameter is necessary since this function calls internally the cv() function previously described.
+
+*n_iter = the number of iteration for the handmade.em() function
 
 
 
+As always, every time we do a fit we try different initialization and we return the one with the best log-likelihood. Of course, in this case we do that every time the validation test changes. For each k (where k always represent the number of gaussians composing the MoG) we have in our hand 5 or 10 log-likelihood computed on every different validation sets (depending if we are dealing with 5-CV or 10-CV), then we compute the average and we store it into an array called results. We finally call the podium() function to return the top three k values (representing the number of gaussian forming each MoG) according to the average log-likelihood computed on the validation sets.
+
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+cross_validation<-function(Dataset,k_folds,n_iter){
+  models=list()
+  for (j in 1:length(Dataset))
+  {
+    dataset=Dataset[[j]]
+    k_cv=cv(dataset, k_folds)
+    
+    results=rep(0,k_max)
+    
+    for (i in 1:k_max)
+    { 
+      
+      
+      k_cv_results=rep(NA,k_folds)
+      
+      for (fold in 1:k_folds)
+        {
+        test=k_cv[[fold]]
+        train=do.call(c,k_cv[-fold])
+        
+        
+        ll_sum <- -Inf
+        
+        #THIS CYCLE KEEPS K FIXED AND IS HERE TO SELECT BETTER INITIALIZATION PARAMETERS FOR A FIXED K
+        for (w in 1:init_num)
+        {
+          hem_fit_temp <- handmade.em(train, 
+                                      p      = rep(1/i,i), 
+                                      mu     = runif(i,min=-1.5,max=1.5),
+                                      sigma  = runif(i,min=0.1,max=0.4), 
+                                      n_iter = n_iter,
+                                      plot_flag = F,
+                                      k=i,
+                                      m=j)
+          ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with                                                          TRAIN
+          ll_test<- likefunction(test, hem_fit_temp) # compute log-likelihood with TEST
+          if (sum(ll_train) > ll_sum) 
+          {
+            ll <- ll_test
+            ll_sum <- sum(ll_train)
+            hem_fit <- hem_fit_temp
+          }
+        }
+        #Now ll corresponds to the log-likelihood of the test dataset with the                 inizialization 
+        #data that had the best results on the train set
+        
+        k_cv_results[fold]=sum(ll_test)
+        
+        
+      }
+      ll_mean=mean(k_cv_results)
+      results[length(hem_fit$parameters)/3]= -ll_mean
+      
+    }
+    models[[j]] <- podium(results)
+      
+  }
+  return (models)
+}
+```
+
+Below are reported two lists containing the results for the two different CVs.
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+Cross_validation5_results=cross_validation(data,5,n_iter=100)
+Cross_validation10_results=cross_validation(data,10,n_iter=100)
+```
 
 
+### <span style="color: purple;"> 7) Wasserstein score </span>
+
+
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+Wasserstein_score <-function(Dataset,n_iter=500) {
+  models=list()
+  for (j in 1:length(Dataset))
+  
+  {
+    results=rep(0,k_max)
+    
+    dataset=Dataset[[j]]
+    trainIndex<-createDataPartition(dataset, p = 0.5, 
+                                    list = FALSE, 
+                                    times = 1)
+    train <- dataset[trainIndex]
+    test <- dataset[-trainIndex]
+    
+    Quantile_to_integrate_te <-function(z) quantile(dataset,prob=z,names=FALSE)
+    
+    for (i in 1:k_max){
+      
+      ll_sum <- -Inf
+      
+      #THIS CYCLE KEEPS K FIXED AND IS HERE TO SELECT BETTER INITIALIZATION PARAMETERS FOR A FIXED K
+      for (w in 1:init_num)
+      { hem_fit_temp <- handmade.em(train, 
+                                    p      = rep(1/i,i), 
+                                    mu     = runif(i,min=-1.5,max=1.5),
+                                    sigma  = runif(i,min=0.1,max=0.4), 
+                                    n_iter = n_iter,
+                                    plot_flag = F,
+                                    k=i,
+                                    m=j)
+        ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with TRAIN
+        
+        if (sum(ll_train) > ll_sum) 
+        {
+          ll <- ll_train
+          ll_sum <- sum(ll_train)
+          hem_fit <- hem_fit_temp
+        }
+      }
+      #Now ll corresponds to the log-likelihood of the train dataset with the inizialization 
+      #data that had the best results on the train set
+      
+      len=length(hem_fit$parameters)
+      prob=hem_fit$parameters[1:(len/3)]
+      means=hem_fit$parameters[(1+len/3):(2*len/3)]
+      sigmas=hem_fit$parameters[(2*len/3+1):len]
+      
+      Quantile_to_integrate_k <-function(z) qmixnorm(z, mean=means, pro=prob, sd=sigmas,expand=0.10)
+      
+      function_to_integrate <-function(z) abs(Quantile_to_integrate_te(z)-Quantile_to_integrate_k(z))
+      W_k=integrate(function_to_integrate,lower=0,upper=1,subdivisions = 10000)
+      
+      results[length(hem_fit$parameters)/3]=W_k$value
+    }
+    
+    models[[j]] <- podium(results)
+    
+  }
+  return (models)
+  
+}
+```
+
+Below is returned the lists containing the results based on the Wasserstain score.
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+Wasserstein_score_results=Wasserstein_score(data,n_iter=100)
+```
 
 
 
