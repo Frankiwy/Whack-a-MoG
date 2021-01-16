@@ -10,6 +10,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 <br><br>
 
+### <span style="color: purple;"> 1) Libraries, Parameters & Useful functions</span>
+
 As first thing, here are reported the used external libraries to accomplish the task.  
 ```{r include=TRUE, message=FALSE, eval=FALSE}
 suppressMessages(require(mixtools, quietly = T))
@@ -50,11 +52,15 @@ large_n = gen_distr(5000,n_large) #One can choose how many points will be in eve
 data=c(small_n,large_n) #We concatenate the lists of datasets
 ```
 
-The fallowing 2 functions will be used during the execution of the code.
+The fallowing 4 functions will be used during the execution of the code.
+
 * podium = this function will be called at the end of every metric to return the top k values chosen by every metric on every sample.
+
 * rep.row = it's our function that repeat a vector n times, returning a matrix with n copies of the input vectors as rows. 
+
 * sum.columns = it's our implementation of colSums()- Given a matrix as input, it sums all the columns, returning an array where in position i will be sums of columns i.
 
+* likefunction = this function takes in input a dataset and the results of the hem_fit function and gives the log_likelihood associated to the MoG with the parameters learned by the EM algorithm on the given data.
 ```{r include=TRUE, message=FALSE, eval=FALSE}
 podium <- function(vec,size=3){
   copied_vec = vec # make copy
@@ -82,6 +88,20 @@ sum.columns <- function(A){
   return(res_vec)
 } 
 
+
+#This function takes in input a dataset and the results of the hem_fit function and gives the log_likelihood associated to the MoG with the parameters learned by the EM algorithm on the given data.
+likefunction <- function(y, hem_fit){
+  n_gauss = length(hem_fit$parameters)/3
+  p = hem_fit$parameters[1:n_gauss]
+  mu = hem_fit$parameters[(n_gauss+1):(n_gauss*2)]
+  sigma = hem_fit$parameters[(n_gauss*2+1):(n_gauss*3)]
+  like <- 0
+  for (i in 1:n_gauss){
+    like <- like + p[i]*dnorm(y, mu[i], sigma[i])
+  }
+  return(log(like))
+}
+
 ```
 
 This is the adjusted handmade.em function that works with k Gaussians. We have decided to stick with the code ([Brutti's implementation](https://elearning.uniroma1.it/pluginfile.php/389598/course/section/166527/Topic%2013%20-%20Parametric%20Inference%20-%20MoG.R?time=1608629571077)) impleted by prof. Brutti,  with the fallowing changes:
@@ -94,7 +114,8 @@ This is the adjusted handmade.em function that works with k Gaussians. We have d
 
 * d_tot, r_tot = correspond to r1, r2, d1 and d2 but, since we are dealing with more than two Gaussinas, they are matrices instead of numbers.
 
-Moreover, all the other parameters (p, mu, sigma) have been treated as matrices since there are more than two Gaussians.
+Moreover, all the other parameters (p, mu, sigma) have been treated as matrices since there are more than two Gaussians. 
+Note: We left the calculation of the likelihood and the deviance in the handmade.em() function even though we don't use them. They could be removed to speed up the computation.  
 ```{r include=TRUE, message=FALSE, eval=FALSE}
 
 handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = F, k, m){
@@ -109,7 +130,7 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = F, k, m){
   }
   
   like <- likefunction(y) #compute likelihood
-  like[like<1e-30]=1e-30 #sometimes we get NaN when this number is 0 or really close to   it.
+  like[like<1e-300]=1e-300 #sometimes we get NaN when this number is 0 or really close to   it.
   #It happens rarely, most often when one of the points is really far from the           distribution.
   deviance <- -2*sum(log(like)) # compute deviance
   
@@ -123,7 +144,7 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = F, k, m){
     
     # E step (get responsibilities)
     # responsibility = proportion times the Gaussian over the 2 found parameters
-    for (j in 1:k) {d_tot[j,] <- pmax(p[j]*dnorm(y, mu[j], sigma[j]),1e-30)}
+    for (j in 1:k) {d_tot[j,] <- pmax(p[j]*dnorm(y, mu[j], sigma[j]),1e-300)}
     # getting optimal hidden state (since it is proportionality we need to normalize)      distribution
     for (j in 1:k) {r_tot[j,] <- d_tot[j,]/sum.columns(d_tot)} 
     
@@ -189,6 +210,102 @@ handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = F, k, m){
               res = res)
   return(out)
 }
+```
+
+### <span style="color: purple;">2) Multiple Iinitialization</span>
+
+Since the MIxture of gaussians EM is very sensitive to the intialization parameters, there are multiple solutions that can be considered like:
+
+* trying multiple initialization and keeping only the one that returns best results after the fit. 
+
+AND/OR
+
+* finding an initialization method that returns good results more consistently. One could try using something like k-means++ initialization on the $\mu$ or, provided that one knows additional information about the data, it is possible to use a more specific initialization method. For example, in our case one could initialize one gaussian centered in zero and with a large $\sigma$ and then spread the others along the interval [-1;-1].
+
+We have decided to follow the easiest way and not using additional information about the data. i.e. we initialize with simple uniform distribution for the parameters ($\mu$, $\sigma$) and we do that multiple times and keeping as results only the one that return a better results in terms of fitting. Instead, regarding the p parameter, we didn't randomize its initialization but we assigned 1/k, where k is the number of Gaussians.
+
+IMMAGINI
+
+
+
+### <span style="color: purple;">3) AIC & BIC</span>
+
+
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+
+AIC_BIC <-function(Dataset,n_iter=500){
+  AIC_models=list()
+  BIC_models=list()
+  
+  AIC_results=rep(0,k_max)
+  BIC_results=rep(0,k_max)
+
+  
+  for (j in 1:length(Dataset)){ #This cycle iterates over all samples 
+    XX <- Dataset[[j]]
+    n <- length(XX) 
+    
+    for (i in 1:k_max){ #This is the cycle that tries different number of gaussians
+      
+      
+      #We now do a for loop to find the best initialization data for a particular
+      #fixed k (number of gaussians) and for a fixed dataset XX.
+      
+      ll_sum <- -Inf  #This is a default initialization value. Every likelihood will be       better than this.
+      
+      for (w in 1:init_num){
+        
+        hem_fit_temp <- handmade.em(XX, 
+                               p      = rep(1/i,i), 
+                               mu     = runif(i,min=-1.5,max=1.5),
+                               sigma  = runif(i,min=0.1,max=0.4), 
+                               n_iter = n_iter,
+                               plot_flag = F,
+                               k=i,
+                               m=j)
+        
+        ll_temp<- likefunction(XX, hem_fit_temp) # compute log-likelihood on XX.
+        
+        if (sum(ll_temp) > ll_sum) { # if the new ll is better than the best we had before
+          ll <- ll_temp    # save new ll in the ll variable
+          ll_sum <- sum(ll) # also compute the sum for the next iteration
+          hem_fit <- hem_fit_temp # and save all the values returned by the EM algorithm.
+        }
+        
+      }
+      n_par=length(hem_fit$parameters)-1 # if one knows n-1 values for p, the last one is forced
+      #to be 1-(sum(p_i)). This means that there's one less degree of freedom in the possible
+      #values of p.
+      AIC <- round(-2*sum(ll)+2*n_par,2) # compute AIC
+      BIC <- round(-2*sum(ll) + log(n)*n_par,2) # compute BIC
+      
+      AIC_results[length(hem_fit$parameters)/3]=AIC 
+      BIC_results[length(hem_fit$parameters)/3]=BIC 
+      
+    }
+    #print(AIC_results)
+    #print(BIC_results)
+    
+    AIC_models[[j]] <- podium(AIC_results)
+    BIC_models[[j]] <- podium(BIC_results)
+    
+    
+    remove(XX)
+
+  }
+  
+  out <- list(AIC = AIC_models, 
+              BIC = BIC_models)
+  
+  return (out)
+}
+
+temp_result=AIC_BIC(data,n_iter=100)
+
+AIC_results=temp_result$AIC
+BIC_results=temp_result$BIC
+
+
 ```
 
 
