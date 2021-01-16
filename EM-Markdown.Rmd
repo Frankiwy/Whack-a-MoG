@@ -314,6 +314,7 @@ BIC_results=temp_result$BIC
 The sample_splitting() function takes in input the train_size (30%, 50% or 70% in our cases), all the data on which it has to work, and the number of iterations. Once it has returned the optimized parameters on the training sample by calling the handmade.em() function, it computes the log-likelihood on the test and returns, by calling the podium(), the best three results according to the test log-likelihood.
 
 ```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+#The structure of the code here is similar to the on in the AIC_BIC() function above.
 sample_splitting <-function(train_size,Dataset,n_iter=500) {
   models=list()
   for (j in 1:length(Dataset))
@@ -321,17 +322,18 @@ sample_splitting <-function(train_size,Dataset,n_iter=500) {
     dataset=Dataset[[j]]
     trainIndex<-createDataPartition(dataset, p = train_size, 
                         list = FALSE, 
-                        times = 1)
+                        times = 1) #We use the function "createDataPartition" from the                                        library "caret" to split the dataset in train and test.
     train <- dataset[trainIndex]
     test <- dataset[-trainIndex]
     
-    results=rep(0,k_max)
+    results=rep(0,k_max) #array that will hold the results
     
-    for (i in 1:k_max){
+    for (i in 1:k_max){ #cycle over the different number of gaussians.
       
       ll_sum <- -Inf
       
-      #THIS CYCLE KEEPS K FIXED AND IS HERE TO SELECT BETTER INITIALIZATION PARAMETERS       FOR A FIXED K
+      #This is the cycle that will look for the best initialization data on the
+      #TRAIN set for a fixed k (number of gaussians) value.
       for (w in 1:init_num)
         {
         hem_fit_temp <- handmade.em(train, 
@@ -341,22 +343,26 @@ sample_splitting <-function(train_size,Dataset,n_iter=500) {
                                     n_iter = n_iter,
                                     plot_flag = F,
                                     k=i,
-                                    m=j)
-        ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with             TRAIN
-        ll_test<- likefunction(test, hem_fit_temp) # compute log-likelihood with TEST
-        if (sum(ll_train) > ll_sum) 
+                                    m=j) #the em is called on the train sample.
+        
+        
+        #We now compute the log likelihood with TRAIN
+        ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood on the TRAIN
+        
+        if (sum(ll_train) > ll_sum) #if it was better than the last init parameters on 
+                                    #train then:
           {
-            ll <- ll_test
-            ll_sum <- sum(ll_train)
-            hem_fit <- hem_fit_temp
+            ll <- likefunction(test, hem_fit_temp) # compute log-likelihood on the TEST
+            ll_sum <- sum(ll_train) #keep new best value for the ll on TRAIN
+            hem_fit <- hem_fit_temp #keep all the resutls from this em run.
           }
       }
       #Now ll corresponds to the log-likelihood of the test dataset with the                 initialization data that had the best results on the train set
-      results[length(hem_fit$parameters)/3]= -sum(ll)
+      results[length(hem_fit$parameters)/3]= -sum(ll) #store results for different k values in an array.
 
     }
     
-    models[[j]] <- podium(results)
+    models[[j]] <- podium(results) #keep best 3 results.
    
   }
   return (models)
