@@ -2,8 +2,14 @@ suppressMessages(require(mixtools, quietly = T))
 suppressMessages(require(KScorrect, quietly = T))
 suppressMessages(require(caret, quietly = T))
 library(gt)
-#library(caret)
-#library("KScorrect")
+library(tidyverse)
+library(readr)
+library(hrbrthemes)
+library(viridis)
+library(forcats)
+library(ggplot2)
+library(gridExtra)
+
 
 gen_distr <- function(n, M){
   distr = list()
@@ -512,54 +518,137 @@ write.csv2(TO_SAVE,'listHolder.csv')
 print("finished")
 
 
-######################
 
-get_df <- function(elm_list){
-  n = length(elm_list)
-  res_matrix = matrix(NA, nrow = n, ncol = 4)
-  for (e in 1:n){
-    if (e <= n/2) res_matrix[e,] = append(elm_list[[e]], c('small_n'),after=0)
-    else res_matrix[e,] = append(elm_list[[e]], c('big_n'),after=0)
-  }
-  df <- as.data.frame(res_matrix)
-  colnames(df) <- c("sample_size","1st", "2nd", "3rd")
-  return(df)
-}
+# Plots and Results -------------------------------------------------------
 
-plt_table <- function(df,name){
-  df %>% 
-    gt() %>% 
-    tab_header(title = name)%>%
-    tab_style(style=cell_text(color='pink'), locations=cells_title(c("title")))%>%
-    tab_style(style=cell_fill(color='seagreen4'), locations=cells_title(c("title"))) %>%
-    
-    tab_style(style=cell_fill(color='gold'), locations=cells_column_labels(columns = vars("1st"))) %>%
-    data_color(columns = vars("1st"), colors = c("gold")) %>%
-    
-    tab_style(style=cell_fill(color='azure'), locations=cells_column_labels(columns = vars("2nd"))) %>%
-    data_color(columns = vars("2nd"), colors = c("azure3")) %>%
-    
-    tab_style(style=cell_fill(color='sienna3'),locations=cells_column_labels(columns = vars("3rd"))) %>%
-    data_color(columns = vars("3rd"), colors = c("sienna3")) %>%
-    
-    tab_style(style = cell_text(weight = "bold"), locations=cells_column_labels(columns = vars(sample_size)))
-    
-}
+listHolder2 <- read_delim("listHolder2.csv", 
+                          ";", escape_double = FALSE, trim_ws = TRUE)
+m_names = c("AIC","BIC","SamS_30","SamS_50","SamS_70","CV_5","CV_10","Wasserstein")
 
-m_names = c("AIC","BIC","SamS_30","SamS_50","SamS_70","CV_5","CV_10","Wesserstein")
-for (l in 1:length(listHolder)) print(plt_table(get_df(listHolder[[l]]),m_names[l]))
+# PLOT TABLES FOR EACH METHOD 
 
-list_res = list()
+m_names = c("AIC","BIC","SamS_30","SamS_50","SamS_70","CV_5","CV_10","Wasserstein")
+
+list_res = list() # list where will be stored dfs
 c=1
-for (d in listHolder[-1]){
-  mid_matrix = matrix(NA, nrow = 8, ncol = 4)
-  for (v in 1:length(d)){
-    get_value = eval(parse(text=d[v]))
-    get_value = append(get_value, m_names[v],after=0)
-    mid_matrix[v,] = get_value
+for (d in listHolder2[-1]){#iterate over every column
+  mid_matrix = matrix(NA, nrow = 8, ncol = 4) # matrix where will be stored the results
+  for (v in 1:length(d)){ # open a loop that goes from 1 to 8 
+    get_value = eval(parse(text=d[v])) # get the value into num
+    get_value = append(get_value, m_names[v],after=0) # append to the vector the method name
+    mid_matrix[v,] = get_value # add the vector to the matrix
   }
   df = as.data.frame(mid_matrix)
-  names(df) = c("method","1st","2nd","3rd")
+  names(df) = c("Method",
+                paste("1st(",c,")",sep=""),
+                paste("2nd(",c,")",sep=""),
+                paste("3rd(",c,")",sep=""))
   list_res[[c]] = df
   c = c+1
 }
+
+
+small_matrix = matrix(NA, nrow = 240, ncol = 2) #matrix storing top 3 for small n
+big_matrix = matrix(NA, nrow = 240, ncol = 2) #matrix storing top 3 for big n
+small_first_matrix = matrix(NA, nrow = 80, ncol = 2) #matrix storing top 1 for small n
+big_first_matrix = matrix(NA, nrow = 80, ncol = 2) #matrix storing top 1 for small n
+small_c = 1 # counter for top 3 small n
+big_c = 1 # counter for top 3 big n
+small_c_first = 1 # counter for top 1 small n 
+big_c_first = 1 # counter for top 1 big n
+
+for (n in 1:8){
+  m = length(listHolder2) #length == 20
+  get_model = listHolder2[n,2:m] # get a row of the listHolder file
+  threshold = 1 # threshould to distringuish between results from small and big n
+  for (v in get_model){ #iterate over each vector
+    get_value = eval(parse(text=v)) # convert from string to number
+    if (threshold<=10){ # if results belong to the small n
+      small_first_matrix[small_c_first,] = append(get_value[1], m_names[n],after=0) # add to
+      # the small_first matrix only the 1st result
+      small_c_first = small_c_first +1
+      for (e in get_value){#iterate over the the 3 results
+        e = append(e, m_names[n],after=0) # add the method that returned those results
+        small_matrix[small_c,] = e # add the vector to the small_matrix
+        small_c = small_c+1
+      }
+    }
+    else { # if results belong to big n
+      big_first_matrix[big_c_first,] = append(get_value[1], m_names[n],after=0)# add to
+      # the big_first matrix only the 1st result
+      big_c_first = big_c_first +1
+      for (e in get_value){#iterate over the the 3 results
+        e = append(e, m_names[n],after=0)# add the method that returned those results
+        big_matrix[big_c,] = e# add the vector to the big_matrix
+        big_c = big_c+1
+      }
+    }
+    threshold = threshold +1
+  }
+}  
+
+# function to convert a matrix into a df
+sort_results <- function(matrix_to_convert){
+  df= as.data.frame(matrix_to_convert) #convert into df
+  names(df) = c("Method", "Result") 
+  
+  #add sort levels
+  df$Result <- factor(df$Result,levels = c("1", "2", "3", "4",
+                                           "5", "6", "7", "8","9","10","11", "12"))
+  return(df)
+}
+
+# function to plot histogram either for top 3 or top 1 results:
+single_hist <- function(matrix_to_convert,sample_s){
+  df = sort_results(matrix_to_convert) # call the sort function
+  p <- df %>%
+    ggplot( aes(x=Result, color=Method, fill=Method)) +
+    geom_histogram(alpha=0.6, binwidth = 10, stat = 'count') +
+    xlab(paste("SamSize n = ",sample_s,sep="")) +
+    theme(
+      axis.title.x = element_text(colour='red',face='bold'),
+      axis.title.y = element_text(colour='red',face='bold'),
+    ) 
+  
+  return(p)
+}
+
+# function to plot multiple histogram only of top 3 results:
+multiple_hist <- function(matrix_to_convert,sample_s){
+  df = sort_results(matrix_to_convert)
+  p<- df %>%
+    ggplot( aes(x=Result, color=Method, fill=Method)) +
+    geom_histogram(alpha=0.6, binwidth = 5, stat = 'count') +
+    scale_fill_viridis(discrete=TRUE) +
+    scale_color_viridis(discrete=TRUE) +
+    theme_ipsum() +
+    theme(
+      legend.position="none",
+      panel.spacing = unit(1, "lines"),
+      strip.text.x = element_text(size = 10,face='bold'),
+      axis.title.x = element_text(hjust=.5, vjust=-1.5,colour='red',face='bold'),
+      axis.title.y = element_text(hjust=.5, vjust=1.5,colour='red',face='bold'),
+      plot.title = element_text(color='purple', size=12)
+    ) +
+    ggtitle(paste("Metric Comporison for sample size n =  ", sample_s, sep="")) +
+    xlab("K") +
+    ylab("Count") +
+    
+    facet_wrap(~Method)
+  
+  return(p)
+}
+
+
+grid.arrange(single_hist(small_first_matrix,300),
+             single_hist(big_first_matrix,5000), nrow=1, ncol=2,
+             top = textGrob("TOP 1st Results",gp=gpar(fontsize=15,font="bold")))
+
+
+grid.arrange(single_hist(small_matrix,300),
+             single_hist(big_matrix,5000), nrow=1, ncol=2,
+             top = textGrob("TOP 3 Results",gp=gpar(fontsize=15,font="bold")))
+
+
+multiple_hist(small_matrix, 300)
+multiple_hist(big_matrix, 5000)
