@@ -52,6 +52,7 @@ library(hrbrthemes)
 library(viridis)
 library(forcats)
 library(ggplot2)
+library(grid)
 library(gridExtra)
 
 ```
@@ -642,7 +643,7 @@ listHolder2 <- read_delim("listHolder2.csv",
 
 ```{r include=TRUE, echo = FALSE, message=FALSE, warning=FALSE, eval=TRUE, class.source="bg-success"}
 
-m_names = c("AIC","BIC","SamS_30","SamS_50","SamS_70","CV_5","CV_10","Wesserstein")
+m_names = c("AIC","BIC","SamS_30","SamS_50","SamS_70","CV_5","CV_10","Wasserstein")
 
 list_res = list() # list where will be stored dfs
 c=1
@@ -720,11 +721,19 @@ sort_results <- function(matrix_to_convert){
 }
 
 # function to plot histogram either for top 3 or top 1 results:
-single_hist <- function(matrix_to_convert){
+single_hist <- function(matrix_to_convert,sample_s,legend_location="none"){
   df = sort_results(matrix_to_convert) # call the sort function
   p <- df %>%
     ggplot( aes(x=Result, color=Method, fill=Method)) +
-    geom_histogram(alpha=0.6, binwidth = 5, stat = 'count') 
+    geom_histogram(alpha=0.6, binwidth = 5, stat = 'count') +
+    xlab(paste("Small Sample n = ",sample_s,sep="")) +
+    theme_ipsum() +
+    theme(
+      legend.position=legend_location,
+      axis.title.x = element_text(hjust=.5, vjust=-1.5,colour='red',face='bold'),
+      axis.title.y = element_text(hjust=.5, vjust=1.5,colour='red',face='bold'),
+    ) 
+  
   return(p)
 }
 
@@ -758,13 +767,15 @@ multiple_hist <- function(matrix_to_convert,sample_s){
 
 
 ```{r include=TRUE, echo=FALSE, warning=FALSE}
-grid.arrange(single_hist(small_first_matrix),
-             single_hist(big_first_matrix), nrow=1, ncol=2)
+grid.arrange(single_hist(small_first_matrix,300),
+             single_hist(big_first_matrix,5000, legend_location = "rigth"), nrow=1, ncol=2,
+             top = textGrob("TOP 1st Results",gp=gpar(fontsize=15,font="bold")))
 ```
 
 ```{r include=TRUE, echo=FALSE, warning=FALSE}
-grid.arrange(single_hist(small_matrix),
-             single_hist(big_matrix), nrow=1, ncol=2)
+grid.arrange(single_hist(small_matrix,300),
+             single_hist(big_matrix,5000, legend_location = "right"), nrow=1, ncol=2,
+             top = textGrob("TOP 3 Results",gp=gpar(fontsize=15,font="bold")))
 ```
 
 ```{r include=TRUE, echo=FALSE, warning=FALSE}
