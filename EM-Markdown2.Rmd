@@ -763,6 +763,11 @@ grid.arrange(single_hist(small_first_matrix),
 ```
 
 ```{r include=TRUE, echo=FALSE, warning=FALSE}
+grid.arrange(single_hist(small_matrix),
+             single_hist(big_matrix), nrow=1, ncol=2)
+```
+
+```{r include=TRUE, echo=FALSE, warning=FALSE}
 multiple_hist(small_matrix, 300)
 multiple_hist(big_matrix, 5000)
 ```
