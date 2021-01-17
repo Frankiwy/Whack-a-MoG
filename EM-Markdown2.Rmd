@@ -387,7 +387,7 @@ sample_splitting <-function(train_size,Dataset,n_iter=500) {
           }
       }
       #Now ll corresponds to the log-likelihood of the test dataset with the                 initialization data that had the best results on the train set
-      results[length(hem_fit$parameters)/3]= -sum(ll) #store results for different k values in an array.
+      results[length(hem_fit$parameters)/3]= -sum(ll) #store results for different k values in an array. We put "-" because our podium function takes the least 3 values.
 
     }
     
@@ -451,30 +451,33 @@ The cross_validation() function takes in input:
 As always, every time we do a fit we try different initialization and we return the one with the best log-likelihood. Of course, in this case we do that every time the validation test changes. For each k (where k always represent the number of gaussians composing the MoG) we have in our hand 5 or 10 log-likelihood computed on every different validation sets (depending if we are dealing with 5-CV or 10-CV), then we compute the average and we store it into an array called results. We finally call the podium() function to return the top three k values (representing the number of gaussian forming each MoG) according to the average log-likelihood computed on the validation sets.
 
 ```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+
+#The structure of this function is similar to the sample splitting.
+
 cross_validation<-function(Dataset,k_folds,n_iter){
   models=list()
   for (j in 1:length(Dataset))
   {
-    dataset=Dataset[[j]]
-    k_cv=cv(dataset, k_folds)
+    dataset=Dataset[[j]] 
+    k_cv=cv(dataset, k_folds) #we create the folds with our function
     
-    results=rep(0,k_max)
+    results=rep(0,k_max)   #array to store the results
     
-    for (i in 1:k_max)
+    for (i in 1:k_max) 
     { 
       
       
-      k_cv_results=rep(NA,k_folds)
+      k_cv_results=rep(NA,k_folds) #array to store the results for a particular fold
       
-      for (fold in 1:k_folds)
+      for (fold in 1:k_folds) #for each fold
         {
-        test=k_cv[[fold]]
-        train=do.call(c,k_cv[-fold])
+        test=k_cv[[fold]]  #split into test
+        train=do.call(c,k_cv[-fold]) #and train
         
         
-        ll_sum <- -Inf
+        ll_sum <- -Inf #initialize the "best likelihood". This will change when better initialziation parameters are found.
         
-        #THIS CYCLE KEEPS K FIXED AND IS HERE TO SELECT BETTER INITIALIZATION PARAMETERS FOR A FIXED K
+        #This is the cycle to find better initialization parameters.
         for (w in 1:init_num)
         {
           hem_fit_temp <- handmade.em(train, 
@@ -486,26 +489,25 @@ cross_validation<-function(Dataset,k_folds,n_iter){
                                       k=i,
                                       m=j)
           ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with                                                          TRAIN
-          ll_test<- likefunction(test, hem_fit_temp) # compute log-likelihood with TEST
           if (sum(ll_train) > ll_sum) 
           {
-            ll <- ll_test
-            ll_sum <- sum(ll_train)
-            hem_fit <- hem_fit_temp
+            ll <- likefunction(test, hem_fit_temp) # compute log-likelihood with TEST
+            ll_sum <- sum(ll_train) #save best likelihood on TRAIN found until now
+            hem_fit <- hem_fit_temp  #and the returned parameters for that particular                                            fitted model
           }
         }
-        #Now ll corresponds to the log-likelihood of the test dataset with the                 inizialization 
-        #data that had the best results on the train set
+        #Now ll corresponds to the log-likelihood of the test dataset with the                 inizialization data that had the best results on the train set
         
-        k_cv_results[fold]=sum(ll_test)
+        k_cv_results[fold]=sum(ll_test) #store the result in this array
         
         
       }
-      ll_mean=mean(k_cv_results)
-      results[length(hem_fit$parameters)/3]= -ll_mean
+      ll_mean=mean(k_cv_results) #get the mean log-likelihood over the k folds. 
+      results[length(hem_fit$parameters)/3]= -ll_mean #store mean in this array. We put
+                                  # "-" because our podium function takes lowest 3 values.
       
     }
-    models[[j]] <- podium(results)
+    models[[j]] <- podium(results) #call our function to get top 3 for each dataset.
       
   }
   return (models)
@@ -528,22 +530,25 @@ Wasserstein_score <-function(Dataset,n_iter=500) {
   for (j in 1:length(Dataset))
   
   {
-    results=rep(0,k_max)
+    results=rep(0,k_max) #array that will keep the results for each k
     
     dataset=Dataset[[j]]
     trainIndex<-createDataPartition(dataset, p = 0.5, 
                                     list = FALSE, 
                                     times = 1)
-    train <- dataset[trainIndex]
-    test <- dataset[-trainIndex]
+    train <- dataset[trainIndex] #split into train
+    test <- dataset[-trainIndex] #and test
     
-    Quantile_to_integrate_te <-function(z) quantile(dataset,prob=z,names=FALSE)
+    #We define a function of a single variable. It corresponds to the quantile of our
+    #empirical distribution. We use the test dataset for this.
+    Quantile_to_integrate_te <-function(z) quantile(test,prob=z,names=FALSE)
+    
     
     for (i in 1:k_max){
       
-      ll_sum <- -Inf
+      ll_sum <- -Inf #initialize the "best likelihood". It will be update when better initialization parameters are found for a particular k.
       
-      #THIS CYCLE KEEPS K FIXED AND IS HERE TO SELECT BETTER INITIALIZATION PARAMETERS FOR A FIXED K
+      #This cycle is looking for the best initialization parameters for a particular k.
       for (w in 1:init_num)
       { hem_fit_temp <- handmade.em(train, 
                                     p      = rep(1/i,i), 
@@ -555,30 +560,34 @@ Wasserstein_score <-function(Dataset,n_iter=500) {
                                     m=j)
         ll_train<- likefunction(train, hem_fit_temp) # compute log-likelihood with TRAIN
         
-        if (sum(ll_train) > ll_sum) 
+        if (sum(ll_train) > ll_sum) #if we found a better log likelihood
         {
-          ll <- ll_train
-          ll_sum <- sum(ll_train)
-          hem_fit <- hem_fit_temp
+          ll <- ll_train #keep that ll
+          ll_sum <- sum(ll_train) #the sum for further comparisons
+          hem_fit <- hem_fit_temp #and all the returned parameters.
         }
       }
       #Now ll corresponds to the log-likelihood of the train dataset with the inizialization 
       #data that had the best results on the train set
       
+      #get the p, menas and sigma values.
       len=length(hem_fit$parameters)
       prob=hem_fit$parameters[1:(len/3)]
       means=hem_fit$parameters[(1+len/3):(2*len/3)]
       sigmas=hem_fit$parameters[(2*len/3+1):len]
       
+      #define the quantile for a MoG with k values with the parameters got by em_fit
       Quantile_to_integrate_k <-function(z) qmixnorm(z, mean=means, pro=prob, sd=sigmas,expand=0.10)
       
+      #integrate the absolute value of the difference between 0 and 1.
       function_to_integrate <-function(z) abs(Quantile_to_integrate_te(z)-Quantile_to_integrate_k(z))
       W_k=integrate(function_to_integrate,lower=0,upper=1,subdivisions = 10000)
       
+      #and store the result in the array "results"
       results[length(hem_fit$parameters)/3]=W_k$value
     }
     
-    models[[j]] <- podium(results)
+    models[[j]] <- podium(results) #keep top 3 models for a particular dataset.
     
   }
   return (models)
@@ -609,6 +618,16 @@ print("finished")
 
 ##########################################################
 ## RESULTS
+
+We now comment the result we got. A full table is in APPENDIX C.
+
+* The k value chosen by the AIC is always higher than the one chosen from the BIC for the small sample size. This is expected since the penalization that the BIC gives to the number of parameters used is higher and the fit for small datasets is not very good. The effect is still there for the large sample size, but it's less visible and the number of chosen gaussians is often the same.
+
+* The "true" value for k(6) is almost never in the top 3. With our method of initialization, it's really hard for the model to actually find good parameters for a fit with 6 gaussians and even when it does it's not necessarily better (according to the log-likelihood metric) than a model with more gaussians. The number 7 is chosen a lot, especially for the large samples, though: the optimization leads to two gaussians with large sigma and small p and 5 different gaussians with small sigmas centered at the peaks.
+
+* On the large datasets, the models chosen by the sample splitting(especially with 50% and 70% as the train set) and cross validation methodusually go for high number of gaussians. We were at first confused by this, but it's  since one is only using the log-likelihood as a metric and it doesn't penalize the number of parameters used in the model. These models with more than 6 gaussians are not overfitting (in the sense of "not being predictive on unseen data") and a lot of the extra gaussians in the trained model have small p values or are somewhat reduntant (some gaussians can be almost obtained by multiplying a gaussian by a number)
+
+*We chose to give the top 3 results for each metric, but this representation doesn't show if the top 3 models are close (with the metric given by that particular scoring method) or not. Both cases happen in our tests. It's worth noting, though, that for all the methods except for the last one, the scores are on a logarithmic scale: even a "small" difference from the top scoring one can be significant and could be sufficient to discard the model. As an example, if one were to divide the AIC scores that we calculated by the number of datapoints (to normalize the result) and got scores of 1000 and 1050, while one cannot conclude that the first model is a "good" one it is possible to say that according to the AIC the second model is significantly worse (the probability of it being better according to AIC is proportional to $e^{-50/2}). A more accurate analysis could be done by keeping the top k values but only if the difference from the top one is over a certain threshold.
 
 ```{r include=TRUE, message=FALSE, eval=TRUE, class.source="bg-success"}
 listHolder2 <- read_delim("listHolder2.csv", 
