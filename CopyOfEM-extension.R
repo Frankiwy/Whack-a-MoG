@@ -1,7 +1,7 @@
 suppressMessages(require(mixtools, quietly = T))
 suppressMessages(require(KScorrect, quietly = T))
 suppressMessages(require(caret, quietly = T))
-library(gt)
+#library(gt)
 #library(caret)
 #library("KScorrect")
 
@@ -23,13 +23,13 @@ init_num=8 #Every function that calls the EM algorithm tries to initialiaze mult
 #on the training sample (which for AIC and BIC coincides with the test sample).
 #Set this to 1 for a (much) faster run of the code.
 
-n_small=8 #number of small samples from the Bart.
-n_large=8 #number of large samples from the Bart.
+n_small=10 #number of small samples from the Bart.
+n_large=10 #number of large samples from the Bart.
 
 k_max=15 #The number of gaussians used for the MoG will be from 1 to k_max.
 
 small_n = gen_distr(300,n_small) #One can choose how many points will be in every small sample
-large_n = gen_distr(50000,n_large) #One can choose how many points will be in every large sample
+large_n = gen_distr(25000,n_large) #One can choose how many points will be in every large sample
 
 
 
@@ -70,28 +70,29 @@ sum.columns <- function(A){
 
 handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = F, k, m){
   
-  d_tot <- rep.row(rep(NA,length(y)),k)
-  r_tot <- rep.row(rep(NA,length(y)),k)
+  d_tot <- rep.row(rep(NA,k),length(y))
+  r_tot <- rep.row(rep(NA,k),length(y))
   
   for (iter in 1:n_iter) {
     
     # E step (get responsibilities)
     # responsibility = proportion times the Gaussian over the 2 found parameters
-    for (j in 1:k) {d_tot[j,] <- pmax(p[j]*dnorm(y, mu[j], sigma[j]),1e-30)}
+    for (j in 1:k) {d_tot[,j] <- pmax(p[j]*dnorm(y, mu[j], sigma[j]),1e-30)}
     # getting optimal hidden state (since it is proportionality we need to normalize) distribution
-    sum_columns=sum.columns(d_tot)
-    for (j in 1:k) {r_tot[j,] <- d_tot[j,]/sum_columns} 
+
+    r_tot=d_tot/(rowSums(d_tot,na.rm=TRUE))
     
     # M step
     # here we compute the p, mean and sigma for each gaussian.
-    for (j in 1:k){
-      r = r_tot[j,]
-      sum_r=sum(r)
-      p[j]     <- sum_r/length(r)
-      mu[j]    <- sum(r*y)/(sum_r)   
-      sigma[j] <- sqrt(max((sum(r*(y^2))/sum_r - (mu[j])^2 ),1.0e-16))   #We don't want
+  
+    r=r_tot
+    y=c(y)
+    p    <- colMeans(r,na.rm=TRUE)
+    col_sums=colSums(r,na.rm=TRUE) 
+    mu   <- colSums(r*y)/col_sums
+    sigma <- sqrt(pmax((colSums(r*(y^2),na.rm=TRUE)/col_sums- (mu)^2 ),1.0e-16))   #We don't want
       #a value of sigma too small to avoid computational errors.
-     }
+     
   }
   if (plot_flag){
     
@@ -173,7 +174,7 @@ AIC_BIC <-function(Dataset,n_iter=500){
   for (j in 1:length(Dataset)){ #This cycle iterates over all samples 
     XX <- Dataset[[j]]
     n <- length(XX) 
-    
+    print(j)
     for (i in 1:k_max){ #This is the cycle that tries different number of gaussians
       
       
@@ -193,7 +194,6 @@ AIC_BIC <-function(Dataset,n_iter=500){
                                plot_flag = F,
                                k=i,
                                m=j)
-        
         ll_temp<- likefunction(XX, hem_fit_temp) # compute log-likelihood on XX.
         
         if (sum(ll_temp) > ll_sum) { # if the new ll is better than the best we had before
@@ -243,7 +243,7 @@ BIC_results=temp_result$BIC
 sample_splitting <-function(train_size,Dataset,n_iter=500) {
   models=list()
   for (j in 1:length(Dataset))
-    {
+    {print(j)
     dataset=Dataset[[j]]
     trainIndex<-createDataPartition(dataset, p = train_size, 
                         list = FALSE, 
@@ -415,7 +415,7 @@ Wasserstein_score <-function(Dataset,n_iter=500) {
   models=list()
   for (j in 1:length(Dataset))
   
-  {
+  { print(j)
     results=rep(0,k_max)
     
     dataset=Dataset[[j]]
@@ -487,46 +487,3 @@ listHolder=list(AIC=AIC_results,
 TO_SAVE= do.call(rbind, listHolder)
 write.csv2(TO_SAVE,'listHolder3.csv')
 print("finished")
-
-<<<<<<< HEAD
-listHolder
-typeof(length(listHolder$AIC))
-######################
-
-get_df <- function(elm_list){
-  n = length(elm_list)
-  res_matrix = matrix(NA, nrow = n, ncol = 4)
-  for (e in 1:n){
-    if (e <= n/2) res_matrix[e,] = append(elm_list[[e]], c('small_n'),after=0)
-    else res_matrix[e,] = append(elm_list[[e]], c('big_n'),after=0)
-  }
-  df <- as.data.frame(res_matrix)
-  colnames(df) <- c("sample_size","1st", "2nd", "3rd")
-  return(df)
-}
-
-plt_table <- function(df,name){
-  df %>% 
-    gt() %>% 
-    tab_header(title = name)%>%
-    tab_style(style=cell_text(color='pink'), locations=cells_title(c("title")))%>%
-    tab_style(style=cell_fill(color='seagreen4'), locations=cells_title(c("title"))) %>%
-    
-    tab_style(style=cell_fill(color='gold'), locations=cells_column_labels(columns = vars("1st"))) %>%
-    data_color(columns = vars("1st"), colors = c("gold")) %>%
-    
-    tab_style(style=cell_fill(color='azure'), locations=cells_column_labels(columns = vars("2nd"))) %>%
-    data_color(columns = vars("2nd"), colors = c("azure3")) %>%
-    
-    tab_style(style=cell_fill(color='sienna3'),locations=cells_column_labels(columns = vars("3rd"))) %>%
-    data_color(columns = vars("3rd"), colors = c("sienna3")) %>%
-    
-    tab_style(style = cell_text(weight = "bold"), locations=cells_column_labels(columns = vars(sample_size)))
-    
-}
-
-m_names = c("AIC","BIC","SamS_30","SamS_50","SamS_70","CV_5","CV_10","Wesserstein")
-for (l in 1:length(listHolder)) print(plt_table(get_df(listHolder[[l]]),m_names[l]))
-
-=======
->>>>>>> refs/remotes/origin/main
