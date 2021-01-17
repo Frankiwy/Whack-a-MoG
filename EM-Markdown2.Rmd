@@ -40,7 +40,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 As first thing, here are reported the used external libraries to accomplish the task.  
-```{r include=TRUE, message=FALSE, eval=TRUE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=TRUE, class.source="bg-success", warning=FALSE}
 suppressMessages(require(mixtools, quietly = T))
 suppressMessages(require(KScorrect, quietly = T))
 suppressMessages(require(caret, quietly = T))
@@ -59,7 +59,7 @@ library(gridExtra)
 
 
 The gen_distr() is the function that will generate samples from a Bart distribution implemented using the rnormix() function implemented in R.  
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 gen_distr <- function(n, M){
   distr = list()
   for (j in 1:M) distr[[j]] = rnormmix(n, lambda = c(0.5, rep(0.1,5)),
@@ -70,7 +70,7 @@ gen_distr <- function(n, M){
 
 
 Here below are reported the initialization parameters that the user can change in order to get different results. 
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 set.seed(42)
 
 init_num=8 #Every function that calls the EM algorithm tries to initialize multiple times 
@@ -98,7 +98,7 @@ The fallowing 4 functions will be used during the execution of the code.
 * sum.columns = it's our implementation of colSums(): Given a matrix as input, it sums all the columns, returning an array where in position i will be sums of columns i.
 
 * likefunction = this function takes in input a dataset and the results of the  handmade.em() function and gives the log-likelihood associated to the MoG with the parameters learned by the EM algorithm on the given data.
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 podium <- function(vec,size=3){
   copied_vec = vec # make copy
   result <- rep(NA,size) # initialize vec in memory
@@ -160,7 +160,7 @@ Note: We left the calculation of the likelihood and the deviance in the handmade
 We have considered to implement an early stopping condition by looking how the deviance changes throughout the iterations of the algorithm, but at the end we decided to simply use 200 iterations  because sometimes the speed of convergence is slow and after more iterations it is possible to observe a significant improvement. Look at [Appendix A](#A) for an example of this.
 
 
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 
 handmade.em <- function(y, p, mu, sigma, n_iter, plot_flag = F, k, m){
   
@@ -274,7 +274,7 @@ To understand why a good initialization is important, in [Appendix B](#B), we sh
 
 The AIC_BIC() function represented below is the function used to score every MoG with the two metrics AIC and BIC. The function, after having optimized the parameter by calling the handmade.em() function, computes the AIC and BIC scores. It keeps, by calling the podium(), the top three k values (representing the number of gaussian forming each MoG) according to the AIC and BIC metrics.
 
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 
 AIC_BIC <-function(Dataset,n_iter=500){
   AIC_models=list()
@@ -338,7 +338,7 @@ AIC_BIC <-function(Dataset,n_iter=500){
 
 The AIC_results, BIC_results are two lists that store the AIC and BIC results.
 
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 temp_result=AIC_BIC(data,n_iter=200)
 
 AIC_results=temp_result$AIC
@@ -358,7 +358,7 @@ The sample_splitting() function takes in input:
 
 Once it has returned the optimized parameters on the training sample by calling the handmade.em() function, it computes the log-likelihood on the train, and if was better than the one computed in the previous iteration, it also computes the log-likelihood on the test. At the end it returns, by calling the podium(), the top three k values (representing the number of gaussian forming each MoG) according to log-likelihood computed on the test set.
 
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 #The structure of the code here is similar to the on in the AIC_BIC() function above.
 sample_splitting <-function(train_size,Dataset,n_iter=500) {
   models=list()
@@ -415,10 +415,10 @@ sample_splitting <-function(train_size,Dataset,n_iter=500) {
 ```
 
 Below are reported three lists containing the results for different train-test ratios.
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
-Sample_splitting30_results=sample_splitting(0.30,data,n_iter=100) 
-Sample_splitting50_results=sample_splitting(0.50,data,n_iter=100)
-Sample_splitting70_results=sample_splitting(0.70,data,n_iter=100)
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
+Sample_splitting30_results=sample_splitting(0.30,data,n_iter=200) 
+Sample_splitting50_results=sample_splitting(0.50,data,n_iter=200)
+Sample_splitting70_results=sample_splitting(0.70,data,n_iter=200)
 ```
 
 
@@ -431,7 +431,7 @@ The cv() function, is our implementation of CV-sample splitting. It keeps in inp
 * k_fold = the number of folds on which we want to our dataset to be splitted into.
 
 It returns a list with the desired number of folds.
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 cv <- function(x, k_fold){
   dataset <- x # copy the data set
   l = length(dataset) # get its length
@@ -468,7 +468,7 @@ The cross_validation() function takes in input:
 
 As always, every time we do a fit we try different initialization and we return the one with the best log-likelihood. Of course, in this case we do that every time the validation test changes. For each k (where k always represent the number of gaussians composing the MoG) we have in our hands 5 or 10 log-likelihood computed on every different validation set (depending if we are dealing with 5-CV or 10-CV), then we compute the average and we store it into an array called results. We finally call the podium() function to return the top three k values (representing the number of gaussian forming each MoG) according to the average log-likelihood computed on the validation sets.
 
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 
 #The structure of this function is similar to the sample splitting.
 
@@ -516,7 +516,7 @@ cross_validation<-function(Dataset,k_folds,n_iter){
         }
         #Now ll corresponds to the log-likelihood of the test dataset with the                 inizialization data that had the best results on the train set
         
-        k_cv_results[fold]=sum(ll_test) #store the result in this array
+        k_cv_results[fold]=sum(ll) #store the result in this array
         
         
       }
@@ -533,16 +533,16 @@ cross_validation<-function(Dataset,k_folds,n_iter){
 ```
 
 Below are reported two lists containing the results for the two different CVs.
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
-Cross_validation5_results=cross_validation(data,5,n_iter=100)
-Cross_validation10_results=cross_validation(data,10,n_iter=100)
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
+Cross_validation5_results=cross_validation(data,5,n_iter=200)
+Cross_validation10_results=cross_validation(data,10,n_iter=200)
 ```
 
 
 ### <span style="color: purple;"> 7) Wasserstein score </span>
 
 
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 Wasserstein_score <-function(Dataset,n_iter=500) {
   models=list()
   for (j in 1:length(Dataset))
@@ -614,13 +614,13 @@ Wasserstein_score <-function(Dataset,n_iter=500) {
 ```
 
 Below is returned the lists containing the results based on the Wasserstain score.
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
-Wasserstein_score_results=Wasserstein_score(data,n_iter=100)
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
+Wasserstein_score_results=Wasserstein_score(data,n_iter=200)
 ```
 
 Once all the scores are computed they will be stored into a list and a .csv file is written in order to return it every time is necessary.
 
-```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success"}
+```{r include=TRUE, message=FALSE, eval=FALSE, class.source="bg-success", warning=FALSE}
 listHolder=list(AIC=AIC_results,
                 BIC=BIC_results,
                 Sample_splitting30=Sample_splitting30_results,
@@ -640,7 +640,7 @@ print("finished")
 We now comment the result we got. At the end of this section there are 4 histogram visualizations of the obtained results. A full table, showing all the numerical results for all the metrics and grouped by sample sizes, is available in [Appendix C](#C).
 
 * While BIC and SamS_30 seem to prefer small number of gaussians on small sample size (n=300), the other metrics perform well on average but with a large variance.
-On the other hand, on large sample sizes (n=5000), all the methods have a lower variance even though the average is not necessarily close to 6 but is usually large. As an example look at all the CV results.
+On the other hand, on large sample sizes (n=5000), all the methods have a lower variance and the results are generally cleaner. It is interesting to note how on SamS_30  
 
 * The "true" value for k=6 is almost never in the top 3. With our method of initialization, it's really hard for the model to actually find good parameters for a fit with 6 gaussians and, even when it does, it's not necessarily better than a model with more gaussians according to the particular metric (AIC, BIC, log-likelihood and Wasserstein score). The number 7 is the best result when we are dealing with n=5000, where the EM-fit-Algorithm usually leads to two gaussians with large sigma and 5 different gaussians with small sigmas centered at the peaks (As an example of a good seven gaussians fit is available in [Appendix B](#B)). 
 
@@ -682,7 +682,7 @@ for (d in listHolder2[-1]){#iterate over every column
 ```
 
 
-```{r include=TRUE, echo = FALSE, message=FALSE, eval=TRUE, class.source="bg-success"}
+```{r include=TRUE, echo = FALSE, warning=FALSE, message=FALSE, eval=TRUE, class.source="bg-success"}
 
 small_matrix = matrix(NA, nrow = 240, ncol = 2) #matrix storing top 3 for small n
 big_matrix = matrix(NA, nrow = 240, ncol = 2) #matrix storing top 3 for big n
@@ -696,7 +696,7 @@ big_c_first = 1 # counter for top 1 big n
 for (n in 1:8){
   m = length(listHolder2) #length == 20
   get_model = listHolder2[n,2:m] # get a row of the listHolder file
-  threshold = 1 # threshould to distringuish between results from small and big n
+  threshold = 1 # threshold to distinguish between results from small and big n
   for (v in get_model){ #iterate over each vector
     get_value = eval(parse(text=v)) # convert from string to number
     if (threshold<=10){ # if results belong to the small n
@@ -725,7 +725,7 @@ for (n in 1:8){
 
 ```
 
-```{r include=TRUE, echo = FALSE, message=FALSE, eval=TRUE, class.source="bg-success"}
+```{r include=TRUE, echo = FALSE, warning=FALSE, message=FALSE, eval=TRUE, class.source="bg-success"}
 # function to convert a matrix into a df
 sort_results <- function(matrix_to_convert){
   df= as.data.frame(matrix_to_convert) #convert into df
