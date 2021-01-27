@@ -2,8 +2,11 @@
 title: "Whack a MoG"
 author: "Verdini - Romeo (1765820 - 1618216)"
 date: "15/1/2021"
-output: html_document
-
+output:
+  html_document:
+    highlight: pygments
+    toc: yes
+    toc_float: yes
 ---
 
 <style type="text/css">
